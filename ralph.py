@@ -17,6 +17,7 @@ RESET = "\033[0m"
 BOLD = "\033[1m"
 ITALIC = "\033[3m"
 DIM = "\033[2m"
+CLAUDE_HEADER = "\033[48;5;17m\033[97m\033[1m Claude > \033[0m"
 
 
 def render_markdown(text: str) -> str:
@@ -206,11 +207,11 @@ if mode == "spec":
     print(f"Spec ID: {spec_id}  (saved to {spec_dir}/)")
 
     while True:
-        print("\n--- Claude ---")
+        print(f"\n{CLAUDE_HEADER}\n")
         objects = run_claude(open(interview_file).read())
         append_cost(objects)
         response = extract_text(objects)
-        print("\n--- End ---\n")
+        print()
 
         usage = extract_usage(objects)
         input_tokens = usage.get("input_tokens", 0)

@@ -17,15 +17,27 @@ If none of these exist yet, you're starting a brand new project.
 
 ## Step 2: Interview the User
 
-Ask the user what they want to add or build. Keep it conversational — one or two focused
-questions at a time. Explore:
+Ask questions in a structured format. Each response should contain one or more numbered
+questions, each with lettered options. Always include a free-text option at the end:
 
-- What is the goal of this feature or component?
-- What are the inputs and outputs?
-- What edge cases or constraints matter?
-- How does it relate to what already exists?
+```
+1 - What is the primary goal of this feature?
+  a. Automate an existing manual process
+  b. Expose data to external consumers
+  c. Other (describe below)
 
-Dig deeper where needed. Stop asking when you have enough to write a solid spec.
+2 - How should errors be handled?
+  a. Fail fast and surface to the user
+  b. Retry silently in the background
+  c. Log and continue
+  d. Other (describe below)
+```
+
+The user will reply using the format: `1=a, 2=c, 3="my custom answer"`.
+Parse their answers before asking the next set of questions.
+
+Ask one round of questions at a time — no more than 3-4 questions per round.
+Stop asking when you have enough to write a solid spec.
 
 ## Step 3: Write the Spec
 
