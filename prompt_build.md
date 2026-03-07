@@ -2,6 +2,18 @@
 
 You are implementing a software project.
 
+## Configuration
+
+Read `config.yaml` in the current directory to find the project source location:
+
+```
+src: <path>
+```
+
+All project source code lives in the `src` directory. Read README files, existing code,
+and run validation commands from within `src`. The current directory (fabrikets root)
+contains only `specs/`, `implementation_plan.md`, and prompt files.
+
 ## Output Format
 
 You MUST print status markers as you work so progress is visible:
@@ -19,6 +31,7 @@ You MUST print status markers as you work so progress is visible:
 ## Step 1: Study Requirements
 
 Read `specs/specs.yaml` to get the list of specs. For each relevant spec, read its content at `specs/<id>/spec.md`.
+Also read the README and key source files inside the `src` directory from config to understand the project's current state.
 
 ## Step 2: Load Implementation Plan
 
@@ -36,7 +49,7 @@ Before implementing, check if the task is already implemented in the source code
 
 ## Step 4: Implement
 
-Use your tools to write the actual code files in the `src/src/` directory.
+Use your tools to write the actual code files inside the `src` directory from config.
 - Use the Write tool to create new files
 - Use the Edit tool to modify existing files
 - Do NOT just describe what you would do - actually write the code
@@ -45,11 +58,12 @@ For each file changed, print: `[CODE] filename - brief description of change`
 
 ## Step 5: Validate
 
-Use the Bash tool to run each validation command from the `src/` directory:
+Use the Bash tool to run each validation command from within the `src` directory from config.
+Check the project's README or package.json / Makefile to discover the actual commands.
 
-1. `[VALIDATE] lint` - Run `cd src && npm run lint`, fix issues if any
-2. `[VALIDATE] typecheck` - Run `cd src && npm run typecheck`
-3. `[VALIDATE] test` - Write test files, then run `cd src && npm test`
+1. `[VALIDATE] lint` - Run the project's lint command, fix issues if any
+2. `[VALIDATE] typecheck` - Run the project's typecheck command if applicable
+3. `[VALIDATE] test` - Write test files if needed, then run the project's test command
 
 After all validations, print:
 - `[RESULT] pass` if all passed
@@ -59,9 +73,9 @@ If validation fails, fix the issue and re-validate. If you cannot fix it, mark t
 
 ## Step 6: Commit
 
-If validations pass, use Bash to commit:
+If validations pass, use Bash to commit from within the `src` directory:
 ```bash
-git add -A && git commit -m "spec-name: task description"
+cd <src> && git add -A && git commit -m "<spec-id>: <task description>"
 ```
 
 Example: `a3f2b1: implement user login and session creation`

@@ -38,8 +38,8 @@ def render_markdown(text: str) -> str:
         lines.append(line)
     return "\n".join(lines)
 
-TRACKED_FILES = ["implementation_plan.md", "specs/", "src/"]
 CONTEXT_WINDOW = 200_000
+CONFIG_FILE = "config.yaml"
 
 # Parse arguments
 mode = "spec"
@@ -63,6 +63,43 @@ prompt_files = {"spec": "prompt_spec.md", "plan": "prompt_plan.md", "build": "pr
 prompt_file = prompt_files[mode]
 
 os.makedirs(".ralph", exist_ok=True)
+
+
+def load_config() -> dict:
+    config = {}
+    with open(CONFIG_FILE) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                key, _, value = line.partition(":")
+                config[key.strip()] = value.strip()
+    return config
+
+
+def run_bootstrap() -> dict:
+    print("\nWelcome to Fabrikets! No config found — let's set up your project.\n")
+    src = input("Source directory [src]: ").strip() or "src"
+    if not os.path.exists(src):
+        ans = input(f"'{src}' doesn't exist. Create it? [y/N] ").strip().lower()
+        if ans in ("y", "yes"):
+            os.makedirs(src, exist_ok=True)
+        else:
+            print("Aborted.")
+            sys.exit(0)
+    config = {"src": src}
+    with open(CONFIG_FILE, "w") as f:
+        for k, v in config.items():
+            f.write(f"{k}: {v}\n")
+    print(f"\nConfig saved to {CONFIG_FILE}\n")
+    return config
+
+
+if not os.path.exists(CONFIG_FILE):
+    config = run_bootstrap()
+else:
+    config = load_config()
+
+TRACKED_FILES = ["implementation_plan.md", "specs/", config["src"]]
 
 if not os.path.exists(prompt_file):
     print(f"Error: {prompt_file} not found", file=sys.stderr)

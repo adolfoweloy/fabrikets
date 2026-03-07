@@ -2,6 +2,17 @@
 
 You are creating an implementation plan for a software project. Each invocation processes ONE spec.
 
+## Configuration
+
+Read `config.yaml` in the current directory to find the project source location:
+
+```
+src: <path>
+```
+
+All project source code lives in the `src` directory. The current directory (fabrikets root)
+contains only `specs/`, `implementation_plan.md`, and prompt files — do not treat it as the project.
+
 ## Step 1: Load Current State
 
 1. Read `specs/specs.yaml` to see all available specifications
@@ -34,7 +45,7 @@ If the spec references other specs, read those too for context.
 
 ## Step 4: Check Source Code
 
-Study the source code at `./src` to understand:
+Study the source code in the `src` directory from config to understand:
 - What is already implemented for this spec
 - What is missing or incomplete
 

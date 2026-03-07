@@ -5,13 +5,25 @@ This is a multi-turn interview. Each time you respond, your reply and the user's
 are appended to this file and sent back to you. You will see the full conversation history
 below under "Conversation so far".
 
+## Configuration
+
+Read `config.yaml` in the current directory to find the project source location:
+
+```
+src: <path>
+```
+
+All project source code, README files, and existing code live in the `src` directory.
+The current directory (fabrikets root) contains only `specs/` and prompt files — do not
+treat it as the project.
+
 ## Step 1: Understand the Project
 
 Before asking anything, read the existing context:
 
 - Read `specs/specs.yaml` if it exists — understand what's already specified and the status of each
 - For each existing spec, the content lives at `specs/<id>/spec.md` — read 1-2 to understand the format and level of detail
-- Glance at `src/` to understand what's already been built
+- Glance at the `src` directory from config to understand what's already been built (README, folder structure, key source files)
 
 If none of these exist yet, you're starting a brand new project.
 
