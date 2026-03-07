@@ -1,0 +1,258 @@
+#!/usr/bin/env python3
+"""Ralph - AI-driven development loop"""
+
+import sys
+import os
+import json
+import subprocess
+import time
+import uuid
+from datetime import datetime
+
+CYAN = "\033[36m"
+YELLOW = "\033[33m"
+RED = "\033[31m"
+RESET = "\033[0m"
+
+TRACKED_FILES = ["implementation_plan.md", "specs/", "src/"]
+CONTEXT_WINDOW = 200_000
+
+# Parse arguments
+mode = "spec"
+max_iterations = 1
+
+args = sys.argv[1:]
+i = 0
+while i < len(args):
+    if args[i] == "--max-iterations":
+        i += 1
+        max_iterations = int(args[i])
+    elif args[i] in ("spec", "plan", "build"):
+        mode = args[i]
+    else:
+        print(f"Error: unknown argument '{args[i]}'", file=sys.stderr)
+        print("Usage: ./ralph.py [spec|plan|build] [--max-iterations N]", file=sys.stderr)
+        sys.exit(1)
+    i += 1
+
+prompt_files = {"spec": "prompt_spec.md", "plan": "prompt_plan.md", "build": "prompt_build.md"}
+prompt_file = prompt_files[mode]
+
+os.makedirs(".ralph", exist_ok=True)
+
+if not os.path.exists(prompt_file):
+    print(f"Error: {prompt_file} not found", file=sys.stderr)
+    sys.exit(1)
+
+print(f"Running in {mode} mode using {prompt_file}")
+prompt = open(prompt_file).read()
+
+
+def get_files_hash() -> str:
+    try:
+        result = subprocess.run(
+            f"find {' '.join(TRACKED_FILES)} -type f 2>/dev/null | xargs md5sum 2>/dev/null | sort",
+            shell=True, capture_output=True, text=True
+        )
+        return result.stdout
+    except Exception:
+        return ""
+
+
+def format_tool_input(name: str, inp: dict) -> str:
+    if name in ("Read", "Write", "Edit"):
+        return str(inp.get("file_path", ""))
+    if name == "Glob":
+        return str(inp.get("pattern", ""))
+    if name == "Grep":
+        return f"{inp.get('pattern', '')} in {inp.get('path', '.')}"
+    if name == "Bash":
+        return str(inp.get("command", ""))[:80]
+    return str(inp)[:80]
+
+
+def run_claude(prompt: str) -> list:
+    proc = subprocess.Popen(
+        ["claude", "--dangerously-skip-permissions", "--output-format", "stream-json", "--print", "--verbose"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    proc.stdin.write(prompt)
+    proc.stdin.close()
+
+    objects = []
+    for line in proc.stdout:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        objects.append(obj)
+
+        obj_type = obj.get("type")
+        if obj_type == "assistant":
+            for block in obj.get("message", {}).get("content", []):
+                if block.get("type") == "text":
+                    print(block.get("text", ""), end="", flush=True)
+                elif block.get("type") == "tool_use":
+                    name = block.get("name", "")
+                    summary = format_tool_input(name, block.get("input", {}))
+                    print(f"{CYAN}[{name}] {summary}{RESET}")
+        elif obj_type == "user":
+            for block in obj.get("message", {}).get("content", []):
+                if block.get("type") == "tool_result" and block.get("is_error"):
+                    content = block.get("content", "")
+                    if isinstance(content, list):
+                        content = " ".join(b.get("text", "") for b in content)
+                    print(f"{RED}  ERROR: {str(content)[:150]}{RESET}")
+
+    proc.wait()
+    return objects
+
+
+def append_cost(objects: list) -> None:
+    for obj in objects:
+        if obj.get("type") == "result":
+            cost = str(obj.get("total_cost_usd", ""))[:6]
+            usage = obj.get("usage", {})
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            line = f"cost: ${cost}  in: {usage.get('input_tokens', 0)}  out: {usage.get('output_tokens', 0)}  [{ts}]\n"
+            with open(".ralph/cost.md", "a") as f:
+                f.write(line)
+
+
+def extract_usage(objects: list) -> dict:
+    for obj in objects:
+        if obj.get("type") == "result":
+            return obj.get("usage", {})
+    return {}
+
+
+def extract_text(objects: list) -> str:
+    parts = []
+    for obj in objects:
+        if obj.get("type") == "assistant":
+            for block in obj.get("message", {}).get("content", []):
+                if block.get("type") == "text":
+                    parts.append(block.get("text", ""))
+    return "".join(parts)
+
+
+def show_file_diff(before: str, after: str) -> None:
+    if before != after:
+        print("Files modified:")
+        before_set = set(before.splitlines())
+        after_set = set(after.splitlines())
+        for line in before_set - after_set:
+            parts = line.split()
+            if len(parts) >= 2:
+                print(f"  removed: {parts[1]}")
+        for line in after_set - before_set:
+            parts = line.split()
+            if len(parts) >= 2:
+                print(f"  changed: {parts[1]}")
+    else:
+        print("No files modified")
+
+
+# Spec mode: interactive interview with Claude to create/add a spec
+if mode == "spec":
+    if os.path.exists("specs/specs.yaml"):
+        question = "Start an interview with Claude to add a new specification? [y/N] "
+    else:
+        question = "No specs found. Start an interview with Claude to create a new specification? [y/N] "
+    answer = input(question).strip().lower()
+    if answer not in ("y", "yes"):
+        print("Aborted.")
+        sys.exit(0)
+
+    spec_id = uuid.uuid4().hex[:6]
+    spec_dir = f"specs/{spec_id}"
+    os.makedirs(spec_dir, exist_ok=True)
+
+    interview_file = f"{spec_dir}/interview.md"
+    with open(interview_file, "w") as f:
+        f.write(f"<!-- spec_id: {spec_id} -->\n")
+        f.write(f"<!-- spec_dir: {spec_dir} -->\n\n")
+        f.write(prompt)
+
+    print(f"Spec ID: {spec_id}  (saved to {spec_dir}/)")
+
+    while True:
+        print("\n--- Claude ---")
+        objects = run_claude(open(interview_file).read())
+        append_cost(objects)
+        response = extract_text(objects)
+        print("\n--- End ---\n")
+
+        usage = extract_usage(objects)
+        input_tokens = usage.get("input_tokens", 0)
+        pct = input_tokens / CONTEXT_WINDOW * 100
+        if pct >= 80:
+            color = RED
+        elif pct >= 60:
+            color = YELLOW
+        else:
+            color = ""
+        print(f"{color}Context: {input_tokens:,} / {CONTEXT_WINDOW:,} tokens ({pct:.1f}%){RESET}\n")
+
+        if "[DONE]" in response:
+            print(f"Interview complete. Spec saved to {spec_dir}/")
+            break
+
+        user_input = input("You: ").strip()
+        if user_input.lower() in ("exit", "quit"):
+            break
+
+        with open(interview_file, "a") as f:
+            f.write(f"\n\nAssistant: {response}\n\nUser: {user_input}")
+
+    sys.exit(0)
+
+# Main loop
+for iteration in range(1, max_iterations + 1):
+    print(f"\n=== Iteration {iteration}/{max_iterations} starting at {datetime.now().strftime('%c')} ===")
+    before_hash = get_files_hash()
+
+    print("Sending prompt to Claude...")
+    print("\n--- Claude's response ---")
+    objects = run_claude(prompt)
+    print("\n--- End response ---\n")
+
+    append_cost(objects)
+
+    # Check for API errors
+    has_result = any(obj.get("type") == "result" for obj in objects)
+    if not has_result:
+        print(f"{RED}ERROR: No result from API. Possible causes:{RESET}")
+        print("  - Rate limit exceeded")
+        print("  - Quota/tokens exhausted")
+        print("  - Network error")
+        print("Loop ended: API error")
+        sys.exit(1)
+
+    after_hash = get_files_hash()
+    show_file_diff(before_hash, after_hash)
+
+    result = extract_text(objects)
+
+    if "[STOP]" in result:
+        print("\nLoop ended: all work complete")
+        break
+    elif "[PROGRESS]" in result:
+        print("\nProgress made, continuing to next iteration...")
+    else:
+        print(f"\n{YELLOW}WARNING: No [PROGRESS] or [STOP] marker in response.{RESET}")
+        print("The LLM may not have been able to do any work.")
+        print("Loop ended: no progress")
+        break
+
+    if iteration >= max_iterations:
+        print(f"\nLoop ended: max iterations ({max_iterations}) reached")
+        break
+
+    time.sleep(2)
