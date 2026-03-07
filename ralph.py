@@ -3,6 +3,7 @@
 
 import sys
 import os
+import re
 import json
 import subprocess
 import time
@@ -13,6 +14,28 @@ CYAN = "\033[36m"
 YELLOW = "\033[33m"
 RED = "\033[31m"
 RESET = "\033[0m"
+BOLD = "\033[1m"
+ITALIC = "\033[3m"
+DIM = "\033[2m"
+
+
+def render_markdown(text: str) -> str:
+    """Convert basic markdown to ANSI terminal formatting."""
+    lines = []
+    for line in text.split("\n"):
+        # Headings
+        if line.startswith("### "):
+            line = f"{BOLD}{line[4:]}{RESET}"
+        elif line.startswith("## "):
+            line = f"{BOLD}{line[3:]}{RESET}"
+        elif line.startswith("# "):
+            line = f"{BOLD}{line[2:]}{RESET}"
+        # Inline: bold must come before italic (** before *)
+        line = re.sub(r"\*\*(.+?)\*\*", f"{BOLD}\\1{RESET}", line)
+        line = re.sub(r"\*(.+?)\*", f"{ITALIC}\\1{RESET}", line)
+        line = re.sub(r"`(.+?)`", f"{DIM}\\1{RESET}", line)
+        lines.append(line)
+    return "\n".join(lines)
 
 TRACKED_FILES = ["implementation_plan.md", "specs/", "src/"]
 CONTEXT_WINDOW = 200_000
@@ -97,7 +120,7 @@ def run_claude(prompt: str) -> list:
         if obj_type == "assistant":
             for block in obj.get("message", {}).get("content", []):
                 if block.get("type") == "text":
-                    print(block.get("text", ""), end="", flush=True)
+                    print(render_markdown(block.get("text", "")), end="", flush=True)
                 elif block.get("type") == "tool_use":
                     name = block.get("name", "")
                     summary = format_tool_input(name, block.get("input", {}))
