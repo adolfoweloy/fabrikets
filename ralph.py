@@ -110,8 +110,11 @@ class StatusBar:
     def start(self, config: dict) -> None:
         global _status_cfg
         _status_cfg = config
-        # Reserve the last terminal row by restricting the scroll region
+        # Reserve the last terminal row by restricting the scroll region.
+        # DECSTBM resets the cursor to home, so move it back to the bottom
+        # of the scroll region so output continues flowing naturally.
         sys.stdout.write(f"\033[1;{_term.height - 1}r")
+        sys.stdout.write(_term.move(_term.height - 2, 0))
         sys.stdout.flush()
         self.refresh()
         atexit.register(self._teardown)
