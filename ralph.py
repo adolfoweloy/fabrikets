@@ -9,6 +9,8 @@ import subprocess
 import threading
 import time
 import uuid
+import atexit
+import blessed
 from datetime import datetime
 
 CYAN = "\033[36m"
@@ -100,6 +102,56 @@ class Spinner:
             i += 1
 
 
+_term = blessed.Terminal()
+_status_cfg: dict = {}
+
+
+class StatusBar:
+    def start(self, config: dict) -> None:
+        global _status_cfg
+        _status_cfg = config
+        # Reserve the last terminal row by restricting the scroll region
+        sys.stdout.write(f"\033[1;{_term.height - 1}r")
+        sys.stdout.flush()
+        self.refresh()
+        atexit.register(self._teardown)
+        threading.Thread(target=self._loop, daemon=True).start()
+
+    def refresh(self) -> None:
+        try:
+            total = 0.0
+            if os.path.exists(".ralph/cost.md"):
+                with open(".ralph/cost.md") as f:
+                    for line in f:
+                        m = re.search(r"\$(\d+\.\d+)", line)
+                        if m:
+                            total += float(m.group(1))
+            src = _status_cfg.get("src", "??")
+            content = f"  cost: ${total:.4f}  │  src: {src}  "
+            padded = content.ljust(_term.width)[: _term.width]
+            bar = _term.on_color(235) + _term.color(216) + padded + _term.normal
+            sys.stdout.write(_term.save + _term.move(_term.height - 1, 0) + bar + _term.restore)
+            sys.stdout.flush()
+        except Exception:
+            pass
+
+    def _loop(self) -> None:
+        while True:
+            self.refresh()
+            time.sleep(2)
+
+    def _teardown(self) -> None:
+        try:
+            sys.stdout.write("\033[r")  # restore full scroll region
+            sys.stdout.write(_term.move(_term.height - 1, 0) + _term.clear_eol)
+            sys.stdout.flush()
+        except Exception:
+            pass
+
+
+status_bar = StatusBar()
+
+
 def render_markdown(text: str) -> str:
     """Convert basic markdown to ANSI terminal formatting."""
     lines = []
@@ -182,6 +234,8 @@ if not os.path.exists(CONFIG_FILE):
     config = run_bootstrap()
 else:
     config = load_config()
+
+status_bar.start(config)
 
 TRACKED_FILES = ["implementation_plan.md", "specs/", config["src"]]
 
@@ -278,6 +332,7 @@ def append_cost(objects: list) -> None:
             line = f"cost: ${cost}  in: {usage.get('input_tokens', 0)}  out: {usage.get('output_tokens', 0)}  [{ts}]\n"
             with open(".ralph/cost.md", "a") as f:
                 f.write(line)
+    status_bar.refresh()
 
 
 def extract_usage(objects: list) -> dict:
