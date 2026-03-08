@@ -49,7 +49,38 @@ The user will reply using the format: `1=a, 2=c, 3="my custom answer"`.
 Parse their answers before asking the next set of questions.
 
 Ask one round of questions at a time — no more than 3-4 questions per round.
-Stop asking when you have enough to write a solid spec.
+
+### Functional Requirements
+
+Cover the core behaviour of the feature:
+- Primary use cases and user goals
+- Inputs, outputs, and data flows
+- Business rules and constraints
+- Edge cases and error handling
+- Interactions with existing components
+
+### Non-Functional Requirements
+
+Once functional requirements are clear, explicitly ask about:
+- **Performance**: acceptable latency, throughput expectations
+- **Scalability**: expected load now and in the future
+- **Security**: authentication, authorisation, data sensitivity
+- **Reliability**: acceptable downtime, consistency guarantees
+- **Observability**: logging, metrics, alerting needs
+- **Maintainability**: who owns this, how often will it change
+
+### When to call the Architect
+
+Once you have a solid picture of both functional and non-functional requirements,
+use the **Agent tool** to spawn an architect review before writing the spec.
+
+To do this:
+1. Read `prompt_architect.md` to get the architect's instructions
+2. Call the Agent tool with the architect prompt + the full interview transcript as context
+3. Wait for the findings, then incorporate them into the spec or ask the user follow-up questions
+
+You may spawn multiple specialist agents in parallel if useful (e.g. a security reviewer
+alongside the architect) — just make multiple Agent tool calls before waiting for results.
 
 ## Step 3: Write the Spec
 
