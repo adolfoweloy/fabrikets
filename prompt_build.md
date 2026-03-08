@@ -10,9 +10,18 @@ Read `config.yaml` in the current directory to find the project source location:
 src: <path>
 ```
 
-All project source code lives in the `src` directory. Read README files, existing code,
-and run validation commands from within `src`. The current directory (fabrikets root)
-contains only `specs/`, `implementation_plan.md`, and prompt files.
+All project artifacts live inside the `src` directory:
+
+```
+<src>/
+  specs/              # spec registry and spec files
+  implementation_plan.md
+  .ralph/cost.md
+  (your source code)
+```
+
+The current directory (fabrikets root) contains only `ralph.py`, `prompt_*.md`, and
+`config.yaml`. Do not read or write project files outside of `src`.
 
 ## Output Format
 
