@@ -6,7 +6,7 @@ An AI-driven development loop. Define specs, plan tasks, build — each stage dr
 
 ### `spec` (default)
 
-Starts an interactive interview with Claude to define a new specification. Claude reads your existing project context, asks you questions, and writes the spec to disk.
+Starts an interactive interview with Claude to define a new specification. Claude reads your existing project context, asks structured questions covering functional and non-functional requirements, and writes the spec to disk.
 
 ```bash
 uv run ralph.py
@@ -22,6 +22,16 @@ specs/
     interview.md      # full interview transcript (permanent research artifact)
     spec.md           # the spec Claude wrote
 ```
+
+#### Architect subagent
+
+Once Claude has gathered enough requirements, it automatically triggers an architect subagent. The architect analyses the requirements and returns a structured review covering:
+
+- **Tradeoffs** — design tensions implied by the requirements
+- **Risks** — unclear requirements, scalability cliffs, security concerns, operational issues
+- **Open questions** — specific gaps to resolve before writing the spec
+
+The architect's findings are fed back into the interview so Claude can address them with the user before finalising the spec.
 
 ### `plan`
 
@@ -46,12 +56,14 @@ uv run ralph.py build --max-iterations 10
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--max-iterations N` | `1` | How many specs/tasks to process per run |
+| `-d`, `--debug` | off | Show tool calls from Claude in the terminal |
 
 ## Project layout
 
 ```
 ralph.py              # the loop runner
 prompt_spec.md        # instructions for Claude in spec mode
+prompt_architect.md   # instructions for the architect subagent
 prompt_plan.md        # instructions for Claude in plan mode
 prompt_build.md       # instructions for Claude in build mode
 specs/                # specs created during interviews
