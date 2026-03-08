@@ -72,15 +72,10 @@ Once functional requirements are clear, explicitly ask about:
 ### When to call the Architect
 
 Once you have a solid picture of both functional and non-functional requirements,
-use the **Agent tool** to spawn an architect review before writing the spec.
-
-To do this:
-1. Read `prompt_architect.md` to get the architect's instructions
-2. Call the Agent tool with the architect prompt + the full interview transcript as context
-3. Wait for the findings, then incorporate them into the spec or ask the user follow-up questions
-
-You may spawn multiple specialist agents in parallel if useful (e.g. a security reviewer
-alongside the architect) — just make multiple Agent tool calls before waiting for results.
+output `[ARCHITECT]` on its own line. The system will automatically run an architect
+subagent that reviews the requirements for tradeoffs and risks. Its findings will be
+appended to this conversation as "Architect Review:" for you to incorporate before
+writing the spec.
 
 ## Step 3: Write the Spec
 

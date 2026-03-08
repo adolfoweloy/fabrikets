@@ -25,6 +25,53 @@ SPINNER_WORDS = ["thinking", "reasoning", "working", "computing", "pondering"]
 SPINNER_INTENSITIES = [DIM, "", BOLD, ""]  # dim → normal → bold → normal
 
 
+def print_logo():
+    PALE = "\033[38;5;216m"   # pale orange #ffaf87
+    ORG  = "\033[38;5;208m"   # orange (door accent)
+    WIN  = "\033[38;5;220m"   # amber (windows)
+    SMK  = "\033[38;5;244m"   # gray (smoke)
+
+    # Center 21-wide factory over the ~79-wide text block
+    pad = " " * 29
+
+    factory = [
+        f"    {SMK}░{RESET}     {SMK}░{RESET}     {SMK}░{RESET}    ",
+        f"    {PALE}█{RESET}     {PALE}█{RESET}     {PALE}█{RESET}    ",
+        f"    {PALE}█{RESET}     {PALE}█{RESET}     {PALE}█{RESET}    ",
+        f"{PALE}█████████████████████{RESET}",
+        f"{PALE}█{RESET}   {WIN}▒▒{RESET}    {WIN}▒▒{RESET}    {WIN}▒▒{RESET}  {PALE}█{RESET}",
+        f"{PALE}█{RESET}   {WIN}▒▒{RESET}    {WIN}▒▒{RESET}    {WIN}▒▒{RESET}  {PALE}█{RESET}",
+        f"{PALE}█                   █{RESET}",
+        f"{PALE}█{RESET}      {ORG}████████{RESET}     {PALE}█{RESET}",
+        f"{PALE}█████████████████████{RESET}",
+    ]
+    for line in factory:
+        print(pad + line)
+    print()
+
+    # ANSI Shadow font (Spring Boot style) for FABRIKETS
+    FONT = {
+        'F': ["███████╗", "██╔════╝", "█████╗  ", "██╔══╝  ", "██║     ", "╚═╝     "],
+        'A': [" █████╗ ", "██╔══██╗", "███████║", "██╔══██║", "██║  ██║", "╚═╝  ╚═╝"],
+        'B': ["██████╗ ", "██╔══██╗", "██████╔╝", "██╔══██╗", "██████╔╝", "╚═════╝ "],
+        'R': ["██████╗ ", "██╔══██╗", "██████╔╝", "██╔══██╗", "██║  ██║", "╚═╝  ╚═╝"],
+        'I': ["██╗", "██║", "██║", "██║", "██║", "╚═╝"],
+        'K': ["██╗  ██╗", "██║ ██╔╝", "█████╔╝ ", "██╔═██╗ ", "██║  ██╗", "╚═╝  ╚═╝"],
+        'E': ["███████╗", "██╔════╝", "█████╗  ", "██╔══╝  ", "███████╗", "╚══════╝"],
+        'T': ["████████╗", "╚══██╔══╝", "   ██║   ", "   ██║   ", "   ██║   ", "   ╚═╝   "],
+        'S': ["███████╗", "██╔════╝", "███████╗", "╚════██║", "███████║", "╚══════╝"],
+    }
+
+    for row in range(6):
+        line = "  "
+        for ch in "FABRIKETS":
+            line += FONT[ch][row] + " "
+        print(f"{PALE}{line}{RESET}")
+    print()
+    print(f"  {DIM}{ITALIC}welcome to your agentic factory{RESET}")
+    print()
+
+
 class Spinner:
     def __init__(self):
         self._running = False
@@ -99,6 +146,7 @@ prompt_files = {"spec": "prompt_spec.md", "plan": "prompt_plan.md", "build": "pr
 prompt_file = prompt_files[mode]
 
 os.makedirs(".ralph", exist_ok=True)
+print_logo()
 
 
 def load_config() -> dict:
@@ -311,6 +359,19 @@ if mode == "spec":
             if "[DONE]" in response:
                 print(f"Interview complete. Spec saved to {spec_dir}/")
                 break
+
+            if "[ARCHITECT]" in response:
+                print(f"\n{BOLD}Calling architect subagent...{RESET}\n")
+                architect_prompt = open("prompt_architect.md").read()
+                architect_context = open(interview_file).read()
+                architect_input = f"{architect_prompt}\n\n---\n\n## Interview so far\n\n{architect_context}"
+                arch_objects = run_claude(architect_input, debug=debug)
+                append_cost(arch_objects)
+                arch_findings = extract_text(arch_objects)
+                print()
+                with open(interview_file, "a") as f:
+                    f.write(f"\n\nAssistant: {response}\n\nArchitect Review:\n{arch_findings}")
+                continue
 
             user_input = input("You: ").strip()
             if user_input.lower() in ("exit", "quit"):
