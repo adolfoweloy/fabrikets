@@ -9,7 +9,6 @@ import subprocess
 import threading
 import time
 import uuid
-import atexit
 from datetime import datetime
 
 CYAN = "\033[36m"
@@ -20,7 +19,6 @@ BOLD = "\033[1m"
 ITALIC = "\033[3m"
 DIM = "\033[2m"
 CLAUDE_HEADER = "\033[48;5;17m\033[97m\033[1m Claude > \033[0m"
-YOU_HEADER = "\033[48;5;216m\033[30m\033[1m You > \033[0m"
 
 SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 SPINNER_WORDS = ["thinking", "reasoning", "working", "computing", "pondering"]
@@ -102,54 +100,6 @@ class Spinner:
             i += 1
 
 
-_status_config: dict = {}
-
-
-def _render_status_bar() -> None:
-    try:
-        size = os.get_terminal_size()
-        rows, cols = size.lines, size.columns
-        total = 0.0
-        cost_file = os.path.join(_status_config.get("src", "."), ".ralph", "cost.md")
-        if os.path.exists(cost_file):
-            with open(cost_file) as f:
-                for line in f:
-                    m = re.search(r"\$(\d+\.\d+)", line)
-                    if m:
-                        total += float(m.group(1))
-        src = _status_config.get("src", "??")
-        content = f"  cost: ${total:.4f}  │  src: {src}  "
-        padded = content.ljust(cols)[:cols]
-        BAR_BG = "\033[48;5;235m"
-        BAR_FG = "\033[38;5;216m"
-        sys.stdout.write(f"\033[s\033[{rows};1H{BAR_BG}{BAR_FG}{padded}\033[0m\033[u")
-        sys.stdout.flush()
-    except Exception:
-        pass
-
-
-def _clear_status_bar() -> None:
-    try:
-        rows = os.get_terminal_size().lines
-        sys.stdout.write(f"\033[s\033[{rows};1H\033[2K\033[u")
-        sys.stdout.flush()
-    except Exception:
-        pass
-
-
-def start_status_bar(config: dict) -> None:
-    global _status_config
-    _status_config = config
-    atexit.register(_clear_status_bar)
-    threading.Thread(target=_status_loop, daemon=True).start()
-
-
-def _status_loop() -> None:
-    while True:
-        _render_status_bar()
-        time.sleep(2)
-
-
 def render_markdown(text: str) -> str:
     """Convert basic markdown to ANSI terminal formatting."""
     lines = []
@@ -195,6 +145,7 @@ while i < len(args):
 prompt_files = {"spec": "prompt_spec.md", "plan": "prompt_plan.md", "build": "prompt_build.md"}
 prompt_file = prompt_files[mode]
 
+os.makedirs(".ralph", exist_ok=True)
 print_logo()
 
 
@@ -232,12 +183,7 @@ if not os.path.exists(CONFIG_FILE):
 else:
     config = load_config()
 
-project_dir = config["src"]
-os.makedirs(os.path.join(project_dir, ".ralph"), exist_ok=True)
-
-start_status_bar(config)
-
-TRACKED_FILES = [project_dir]
+TRACKED_FILES = ["implementation_plan.md", "specs/", config["src"]]
 
 if not os.path.exists(prompt_file):
     print(f"Error: {prompt_file} not found", file=sys.stderr)
@@ -330,9 +276,8 @@ def append_cost(objects: list) -> None:
             usage = obj.get("usage", {})
             ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             line = f"cost: ${cost}  in: {usage.get('input_tokens', 0)}  out: {usage.get('output_tokens', 0)}  [{ts}]\n"
-            with open(os.path.join(project_dir, ".ralph", "cost.md"), "a") as f:
+            with open(".ralph/cost.md", "a") as f:
                 f.write(line)
-    _render_status_bar()
 
 
 def extract_usage(objects: list) -> dict:
@@ -371,7 +316,7 @@ def show_file_diff(before: str, after: str) -> None:
 
 # Spec mode: interactive interview with Claude to create/add a spec
 if mode == "spec":
-    if os.path.exists(os.path.join(project_dir, "specs", "specs.yaml")):
+    if os.path.exists("specs/specs.yaml"):
         question = "Start an interview with Claude to add a new specification? [y/N] "
     else:
         question = "No specs found. Start an interview with Claude to create a new specification? [y/N] "
@@ -381,10 +326,10 @@ if mode == "spec":
         sys.exit(0)
 
     spec_id = uuid.uuid4().hex[:6]
-    spec_dir = os.path.join(project_dir, "specs", spec_id)
+    spec_dir = f"specs/{spec_id}"
     os.makedirs(spec_dir, exist_ok=True)
 
-    interview_file = os.path.join(spec_dir, "interview.md")
+    interview_file = f"{spec_dir}/interview.md"
     with open(interview_file, "w") as f:
         f.write(f"<!-- spec_id: {spec_id} -->\n")
         f.write(f"<!-- spec_dir: {spec_dir} -->\n\n")
@@ -428,8 +373,7 @@ if mode == "spec":
                     f.write(f"\n\nAssistant: {response}\n\nArchitect Review:\n{arch_findings}")
                 continue
 
-            print(f"\n{YOU_HEADER}")
-            user_input = input("> ").strip()
+            user_input = input("You: ").strip()
             if user_input.lower() in ("exit", "quit"):
                 break
 
