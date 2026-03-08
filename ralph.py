@@ -132,7 +132,9 @@ class StatusBar:
             src = _status_cfg.get("src", "??")
             content = f"  cost: ${total:.4f}  │  src: {src}  "
             padded = content.ljust(_term.width)[: _term.width]
-            bar = _term.on_color(235) + _term.color(216) + padded + _term.normal
+            BG = "\033[48;5;216m"   # pale orange background
+            FG = "\033[38;5;232m"   # near-black text
+            bar = BG + FG + padded + "\033[0m"
             sys.stdout.write(_term.save + _term.move(_term.height - 1, 0) + bar + _term.restore)
             sys.stdout.flush()
         except Exception:
