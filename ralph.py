@@ -6,6 +6,7 @@ import os
 import re
 import json
 import subprocess
+import threading
 import time
 import uuid
 from datetime import datetime
@@ -18,6 +19,38 @@ BOLD = "\033[1m"
 ITALIC = "\033[3m"
 DIM = "\033[2m"
 CLAUDE_HEADER = "\033[48;5;17m\033[97m\033[1m Claude > \033[0m"
+
+SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+SPINNER_WORDS = ["thinking", "reasoning", "working", "computing", "pondering"]
+SPINNER_INTENSITIES = [DIM, "", BOLD, ""]  # dim → normal → bold → normal
+
+
+class Spinner:
+    def __init__(self):
+        self._running = False
+        self._thread = None
+        self._word_idx = 0
+
+    def start(self):
+        self._running = True
+        self._thread = threading.Thread(target=self._spin, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self._running = False
+        if self._thread:
+            self._thread.join()
+        print(f"\r{' ' * 40}\r", end="", flush=True)
+
+    def _spin(self):
+        i = 0
+        while self._running:
+            frame = SPINNER_FRAMES[i % len(SPINNER_FRAMES)]
+            word = SPINNER_WORDS[(i // 20) % len(SPINNER_WORDS)]
+            intensity = SPINNER_INTENSITIES[i % len(SPINNER_INTENSITIES)]
+            print(f"\r{intensity}{frame} {word}...{RESET}", end="", flush=True)
+            time.sleep(0.08)
+            i += 1
 
 
 def render_markdown(text: str) -> str:
@@ -44,6 +77,7 @@ CONFIG_FILE = "config.yaml"
 # Parse arguments
 mode = "spec"
 max_iterations = 1
+debug = False
 
 args = sys.argv[1:]
 i = 0
@@ -53,9 +87,11 @@ while i < len(args):
         max_iterations = int(args[i])
     elif args[i] in ("spec", "plan", "build"):
         mode = args[i]
+    elif args[i] in ("-d", "--debug"):
+        debug = True
     else:
         print(f"Error: unknown argument '{args[i]}'", file=sys.stderr)
-        print("Usage: ./ralph.py [spec|plan|build] [--max-iterations N]", file=sys.stderr)
+        print("Usage: ./ralph.py [spec|plan|build] [-d] [--max-iterations N]", file=sys.stderr)
         sys.exit(1)
     i += 1
 
@@ -132,7 +168,7 @@ def format_tool_input(name: str, inp: dict) -> str:
     return str(inp)[:80]
 
 
-def run_claude(prompt: str) -> list:
+def run_claude(prompt: str, debug: bool = False) -> list:
     proc = subprocess.Popen(
         ["claude", "--dangerously-skip-permissions", "--output-format", "stream-json", "--print", "--verbose"],
         stdin=subprocess.PIPE,
@@ -142,6 +178,9 @@ def run_claude(prompt: str) -> list:
     )
     proc.stdin.write(prompt)
     proc.stdin.close()
+
+    spinner = Spinner()
+    spinner.start()
 
     objects = []
     for line in proc.stdout:
@@ -158,19 +197,26 @@ def run_claude(prompt: str) -> list:
         if obj_type == "assistant":
             for block in obj.get("message", {}).get("content", []):
                 if block.get("type") == "text":
-                    print(render_markdown(block.get("text", "")), end="", flush=True)
+                    text = block.get("text", "")
+                    if text:
+                        spinner.stop()
+                        print(render_markdown(text), end="", flush=True)
                 elif block.get("type") == "tool_use":
-                    name = block.get("name", "")
-                    summary = format_tool_input(name, block.get("input", {}))
-                    print(f"{CYAN}[{name}] {summary}{RESET}")
+                    if debug:
+                        spinner.stop()
+                        name = block.get("name", "")
+                        summary = format_tool_input(name, block.get("input", {}))
+                        print(f"{CYAN}[{name}] {summary}{RESET}")
         elif obj_type == "user":
             for block in obj.get("message", {}).get("content", []):
                 if block.get("type") == "tool_result" and block.get("is_error"):
+                    spinner.stop()
                     content = block.get("content", "")
                     if isinstance(content, list):
                         content = " ".join(b.get("text", "") for b in content)
                     print(f"{RED}  ERROR: {str(content)[:150]}{RESET}")
 
+    spinner.stop()
     proc.wait()
     return objects
 
@@ -243,77 +289,83 @@ if mode == "spec":
 
     print(f"Spec ID: {spec_id}  (saved to {spec_dir}/)")
 
-    while True:
-        print(f"\n{CLAUDE_HEADER}\n")
-        objects = run_claude(open(interview_file).read())
-        append_cost(objects)
-        response = extract_text(objects)
-        print()
+    try:
+        while True:
+            print(f"\n{CLAUDE_HEADER}\n")
+            objects = run_claude(open(interview_file).read(), debug=debug)
+            append_cost(objects)
+            response = extract_text(objects)
+            print()
 
-        usage = extract_usage(objects)
-        input_tokens = usage.get("input_tokens", 0)
-        pct = input_tokens / CONTEXT_WINDOW * 100
-        if pct >= 80:
-            color = RED
-        elif pct >= 60:
-            color = YELLOW
-        else:
-            color = ""
-        print(f"{color}Context: {input_tokens:,} / {CONTEXT_WINDOW:,} tokens ({pct:.1f}%){RESET}\n")
+            usage = extract_usage(objects)
+            input_tokens = usage.get("input_tokens", 0)
+            pct = input_tokens / CONTEXT_WINDOW * 100
+            if pct >= 80:
+                color = RED
+            elif pct >= 60:
+                color = YELLOW
+            else:
+                color = ""
+            print(f"{color}Context: {input_tokens:,} / {CONTEXT_WINDOW:,} tokens ({pct:.1f}%){RESET}\n")
 
-        if "[DONE]" in response:
-            print(f"Interview complete. Spec saved to {spec_dir}/")
-            break
+            if "[DONE]" in response:
+                print(f"Interview complete. Spec saved to {spec_dir}/")
+                break
 
-        user_input = input("You: ").strip()
-        if user_input.lower() in ("exit", "quit"):
-            break
+            user_input = input("You: ").strip()
+            if user_input.lower() in ("exit", "quit"):
+                break
 
-        with open(interview_file, "a") as f:
-            f.write(f"\n\nAssistant: {response}\n\nUser: {user_input}")
+            with open(interview_file, "a") as f:
+                f.write(f"\n\nAssistant: {response}\n\nUser: {user_input}")
+    except KeyboardInterrupt:
+        print("\n\nSee ya!")
 
     sys.exit(0)
 
 # Main loop
-for iteration in range(1, max_iterations + 1):
-    print(f"\n=== Iteration {iteration}/{max_iterations} starting at {datetime.now().strftime('%c')} ===")
-    before_hash = get_files_hash()
+try:
+    for iteration in range(1, max_iterations + 1):
+        print(f"\n=== Iteration {iteration}/{max_iterations} starting at {datetime.now().strftime('%c')} ===")
+        before_hash = get_files_hash()
 
-    print("Sending prompt to Claude...")
-    print("\n--- Claude's response ---")
-    objects = run_claude(prompt)
-    print("\n--- End response ---\n")
+        print("Sending prompt to Claude...")
+        print("\n--- Claude's response ---")
+        objects = run_claude(prompt, debug=debug)
+        print("\n--- End response ---\n")
 
-    append_cost(objects)
+        append_cost(objects)
 
-    # Check for API errors
-    has_result = any(obj.get("type") == "result" for obj in objects)
-    if not has_result:
-        print(f"{RED}ERROR: No result from API. Possible causes:{RESET}")
-        print("  - Rate limit exceeded")
-        print("  - Quota/tokens exhausted")
-        print("  - Network error")
-        print("Loop ended: API error")
-        sys.exit(1)
+        # Check for API errors
+        has_result = any(obj.get("type") == "result" for obj in objects)
+        if not has_result:
+            print(f"{RED}ERROR: No result from API. Possible causes:{RESET}")
+            print("  - Rate limit exceeded")
+            print("  - Quota/tokens exhausted")
+            print("  - Network error")
+            print("Loop ended: API error")
+            sys.exit(1)
 
-    after_hash = get_files_hash()
-    show_file_diff(before_hash, after_hash)
+        after_hash = get_files_hash()
+        show_file_diff(before_hash, after_hash)
 
-    result = extract_text(objects)
+        result = extract_text(objects)
 
-    if "[STOP]" in result:
-        print("\nLoop ended: all work complete")
-        break
-    elif "[PROGRESS]" in result:
-        print("\nProgress made, continuing to next iteration...")
-    else:
-        print(f"\n{YELLOW}WARNING: No [PROGRESS] or [STOP] marker in response.{RESET}")
-        print("The LLM may not have been able to do any work.")
-        print("Loop ended: no progress")
-        break
+        if "[STOP]" in result:
+            print("\nLoop ended: all work complete")
+            break
+        elif "[PROGRESS]" in result:
+            print("\nProgress made, continuing to next iteration...")
+        else:
+            print(f"\n{YELLOW}WARNING: No [PROGRESS] or [STOP] marker in response.{RESET}")
+            print("The LLM may not have been able to do any work.")
+            print("Loop ended: no progress")
+            break
 
-    if iteration >= max_iterations:
-        print(f"\nLoop ended: max iterations ({max_iterations}) reached")
-        break
+        if iteration >= max_iterations:
+            print(f"\nLoop ended: max iterations ({max_iterations}) reached")
+            break
 
-    time.sleep(2)
+        time.sleep(2)
+except KeyboardInterrupt:
+    print("\n\nSee ya!")
