@@ -217,10 +217,18 @@ def load_config() -> dict:
     return config
 
 
+def to_snake_case(name: str) -> str:
+    name = name.lower().strip()
+    name = re.sub(r"[^a-z0-9\s]", "", name)
+    name = re.sub(r"\s+", "_", name)
+    return name.strip("_")
+
+
 def run_bootstrap() -> dict:
     print("\nWelcome to Fabrikets! No config found — let's set up your project.\n")
     src = input("Source directory [src]: ").strip() or "src"
-    os.makedirs(src, exist_ok=True)
+    domain = input("Initial domain group name (e.g. auth, billing, core): ").strip()
+    os.makedirs(os.path.join(src, domain), exist_ok=True)
     config = {"src": src}
     with open(CONFIG_FILE, "w") as f:
         for k, v in config.items():
@@ -371,27 +379,39 @@ def show_file_diff(before: str, after: str) -> None:
 # Spec mode: interactive interview with Claude to create/add a spec
 if mode == "spec":
     src = config["src"]
-    specs_yaml = os.path.join(src, "specs", "specs.yaml")
-    if os.path.exists(specs_yaml):
-        question = "Start an interview with Claude to add a new specification? [y/N] "
-    else:
-        question = "No specs found. Start an interview with Claude to create a new specification? [y/N] "
-    answer = input(question).strip().lower()
-    if answer not in ("y", "yes"):
+
+    # Show existing domain groups
+    existing_domains = sorted(
+        d for d in os.listdir(src)
+        if os.path.isdir(os.path.join(src, d)) and not d.startswith(".")
+    ) if os.path.isdir(src) else []
+    if existing_domains:
+        print(f"Existing domains: {', '.join(existing_domains)}")
+    domain = input("Domain group name: ").strip()
+    if not domain:
         print("Aborted.")
         sys.exit(0)
 
-    spec_id = uuid.uuid4().hex[:6]
-    spec_dir = os.path.join(src, "specs", spec_id)
-    os.makedirs(spec_dir, exist_ok=True)
+    feature_raw = input("Feature name: ").strip()
+    if not feature_raw:
+        print("Aborted.")
+        sys.exit(0)
+    feature = to_snake_case(feature_raw)
 
-    interview_file = os.path.join(spec_dir, "interview.md")
+    domain_dir = os.path.join(src, domain)
+    os.makedirs(domain_dir, exist_ok=True)
+    interview_file = os.path.join(domain_dir, f"{feature}.md")
+
+    if os.path.exists(interview_file):
+        print(f"Spec already exists: {interview_file}")
+        sys.exit(1)
+
     with open(interview_file, "w") as f:
-        f.write(f"<!-- spec_id: {spec_id} -->\n")
-        f.write(f"<!-- spec_dir: {spec_dir} -->\n\n")
+        f.write(f"<!-- domain: {domain} -->\n")
+        f.write(f"<!-- feature: {feature} -->\n\n")
         f.write(prompt)
 
-    print(f"Spec ID: {spec_id}  (saved to {spec_dir}/)")
+    print(f"Spec: {interview_file}")
 
     try:
         while True:
@@ -413,7 +433,7 @@ if mode == "spec":
             print(f"{color}Context: {input_tokens:,} / {CONTEXT_WINDOW:,} tokens ({pct:.1f}%){RESET}\n")
 
             if "[DONE]" in response:
-                print(f"Interview complete. Spec saved to {spec_dir}/")
+                print(f"Interview complete. Spec saved to {interview_file}")
                 break
 
             if "[ARCHITECT]" in response:
