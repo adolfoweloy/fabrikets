@@ -217,6 +217,18 @@ def load_config() -> dict:
     return config
 
 
+def ask_choice(question: str, options: list) -> int:
+    """Print a numbered menu and return the 0-based index of the chosen option."""
+    print(f"\n{question}")
+    for i, opt in enumerate(options, 1):
+        print(f"  {DIM}{i}.{RESET} {opt}")
+    while True:
+        raw = input("> ").strip()
+        if raw.isdigit() and 1 <= int(raw) <= len(options):
+            return int(raw) - 1
+        print(f"  Enter a number from 1 to {len(options)}")
+
+
 def to_snake_case(name: str) -> str:
     name = name.lower().strip()
     name = re.sub(r"[^a-z0-9\s]", "", name)
@@ -380,7 +392,22 @@ def show_file_diff(before: str, after: str) -> None:
 if mode == "spec":
     src = config["src"]
 
-    # Show existing domain groups
+    mode_choice = ask_choice(
+        "How would you like to start?",
+        ["Create new spec from scratch", "Import an existing spec file"],
+    )
+
+    existing_spec_content = None
+    if mode_choice == 1:
+        existing_path = input("Path to existing spec file: ").strip()
+        if not os.path.exists(existing_path):
+            print(f"File not found: {existing_path}")
+            sys.exit(1)
+        with open(existing_path) as f:
+            existing_spec_content = f.read()
+        print(f"Loaded: {existing_path}")
+
+    # Domain and feature name
     existing_domains = sorted(
         d for d in os.listdir(src)
         if os.path.isdir(os.path.join(src, d)) and not d.startswith(".")
@@ -406,10 +433,26 @@ if mode == "spec":
         print(f"Spec already exists: {interview_file}")
         sys.exit(1)
 
+    # Build the initial prompt — prepend existing spec as context if importing
+    if existing_spec_content:
+        import_preamble = (
+            "## Import Mode\n\n"
+            "The user has provided an existing spec file as a starting point.\n"
+            "Your goal is to review it, ask clarifying questions to fill in any gaps\n"
+            "(functional requirements, non-functional requirements, edge cases, constraints),\n"
+            "and then rewrite it in the Fabrikets spec format.\n\n"
+            "## Existing Spec\n\n"
+            f"{existing_spec_content}\n\n"
+            "---\n\n"
+        )
+        interview_prompt = import_preamble + prompt
+    else:
+        interview_prompt = prompt
+
     with open(interview_file, "w") as f:
         f.write(f"<!-- domain: {domain} -->\n")
         f.write(f"<!-- feature: {feature} -->\n\n")
-        f.write(prompt)
+        f.write(interview_prompt)
 
     print(f"Spec: {interview_file}")
 
