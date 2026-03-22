@@ -104,6 +104,8 @@ Then add the new entry to `<src>/specs.yaml` (create it if it doesn't exist):
 ```yaml
 specs:
   - id: auth__user_login
+    domain: auth
+    feature: user_login
     description: Brief description of what this spec covers
     status: todo
 ```
