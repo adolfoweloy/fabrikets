@@ -8,9 +8,6 @@ import json
 import subprocess
 import threading
 import time
-import uuid
-import atexit
-import blessed
 from datetime import datetime
 
 CYAN = "\033[36m"
@@ -102,80 +99,8 @@ class Spinner:
             i += 1
 
 
-_term = blessed.Terminal()
-_status_cfg: dict = {}
-
-
-class StatusBar:
-    def __init__(self):
-        self._paused = False
-
-    def start(self, config: dict) -> None:
-        global _status_cfg
-        _status_cfg = config
-        # Reserve the last terminal row by restricting the scroll region.
-        # DECSTBM resets the cursor to home, so move it back to the bottom
-        # of the scroll region so output continues flowing naturally.
-        sys.stdout.write(f"\033[1;{_term.height - 1}r")
-        sys.stdout.write(_term.move(_term.height - 2, 0))
-        sys.stdout.flush()
-        self.refresh()
-        atexit.register(self._teardown)
-        threading.Thread(target=self._loop, daemon=True).start()
-
-    def pause(self) -> None:
-        self._paused = True
-
-    def resume(self) -> None:
-        self._paused = False
-        self.refresh()
-
-    def refresh(self) -> None:
-        if self._paused:
-            return
-        try:
-            total = 0.0
-            if os.path.exists(".ralph/cost.md"):
-                with open(".ralph/cost.md") as f:
-                    for line in f:
-                        m = re.search(r"\$(\d+\.\d+)", line)
-                        if m:
-                            total += float(m.group(1))
-            src = _status_cfg.get("src", "??")
-            content = f"  cost: ${total:.4f}  │  src: {src}  "
-            padded = content.ljust(_term.width)[: _term.width]
-            BG = "\033[48;5;216m"   # pale orange background
-            FG = "\033[38;5;232m"   # near-black text
-            bar = BG + FG + padded + "\033[0m"
-            sys.stdout.write(_term.save + _term.move(_term.height - 1, 0) + bar + _term.restore)
-            sys.stdout.flush()
-        except Exception:
-            pass
-
-    def _loop(self) -> None:
-        while True:
-            self.refresh()
-            time.sleep(2)
-
-    def _teardown(self) -> None:
-        try:
-            sys.stdout.write("\033[r")  # restore full scroll region
-            sys.stdout.write(_term.move(_term.height - 1, 0) + _term.clear_eol)
-            sys.stdout.flush()
-        except Exception:
-            pass
-
-
-status_bar = StatusBar()
-
-
 def ask(prompt_text: str) -> str:
-    """input() wrapper that pauses the status bar to avoid display corruption."""
-    status_bar.pause()
-    try:
-        return input(prompt_text)
-    finally:
-        status_bar.resume()
+    return input(prompt_text)
 
 
 def render_markdown(text: str) -> str:
@@ -276,7 +201,6 @@ else:
     config = load_config()
 
 os.makedirs(config["src"], exist_ok=True)
-status_bar.start(config)
 
 TRACKED_FILES = ["implementation_plan.md", "specs/", config["src"]]
 
@@ -376,7 +300,6 @@ def append_cost(objects: list) -> None:
             line = f"cost: ${cost}  in: {usage.get('input_tokens', 0)}  out: {usage.get('output_tokens', 0)}  [{ts}]\n"
             with open(".ralph/cost.md", "a") as f:
                 f.write(line)
-    status_bar.refresh()
 
 
 def extract_usage(objects: list) -> dict:
