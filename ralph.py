@@ -275,6 +275,7 @@ if not os.path.exists(CONFIG_FILE):
 else:
     config = load_config()
 
+os.makedirs(config["src"], exist_ok=True)
 status_bar.start(config)
 
 TRACKED_FILES = ["implementation_plan.md", "specs/", config["src"]]
