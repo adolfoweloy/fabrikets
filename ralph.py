@@ -260,7 +260,7 @@ def to_snake_case(name: str) -> str:
 def run_bootstrap() -> dict:
     print("\nWelcome to Fabrikets! No config found — let's set up your project.\n")
     src = ask("Source directory [src]: ").strip() or "src"
-    domain = ask("Initial domain group name (e.g. auth, billing, core): ").strip()
+    domain = to_snake_case(ask("Initial domain group name (e.g. auth, billing, core): ").strip())
     os.makedirs(os.path.join(src, domain), exist_ok=True)
     config = {"src": src}
     with open(CONFIG_FILE, "w") as f:
@@ -437,7 +437,7 @@ if mode == "spec":
     ) if os.path.isdir(src) else []
     if existing_domains:
         print(f"Existing domains: {', '.join(existing_domains)}")
-    domain = ask("Domain group name: ").strip()
+    domain = to_snake_case(ask("Domain group name: ").strip())
     if not domain:
         print("Aborted.")
         sys.exit(0)
