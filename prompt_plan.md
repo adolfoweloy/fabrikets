@@ -72,6 +72,26 @@ Each task description MUST be comprehensive and self-contained. Include:
 Bad: `Create User interface`
 Good: `Create User interface with fields: id (UUID, generated on creation), email (string, unique, validated as RFC 5321 address), role (admin|member|viewer), createdAt (ISO 8601 timestamp, set server-side)`
 
+### Tests
+
+For every implementation task, add a corresponding test task immediately after it. The test task should cover:
+- Happy path for the main behaviour
+- Key edge cases and error conditions from `requirements.md`
+- Any boundary conditions or invariants from `design.md`
+
+Example:
+```yaml
+- task: >
+    Create User model with fields: id (UUID), email (string, unique, RFC 5321), ...
+  refs: [specs/auth/user_login/design.md]
+  status: todo
+- task: >
+    Test User model: valid creation, duplicate email rejection, invalid email format,
+    missing required fields, id uniqueness across multiple creations
+  refs: [specs/auth/user_login/requirements.md]
+  status: todo
+```
+
 ### refs field
 
 Each task should list which spec files are relevant to it, so build mode loads only what it needs:
