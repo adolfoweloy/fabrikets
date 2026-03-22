@@ -312,14 +312,17 @@ def format_tool_input(name: str, inp: dict) -> str:
 
 
 def run_claude(prompt: str, debug: bool = False) -> list:
+    src_abs = os.path.abspath(config["src"])
+    context = f"<!-- fabrikets_src: {src_abs} -->\n<!-- Your working directory is the project src directory. All file paths are relative to here. -->\n\n"
     proc = subprocess.Popen(
         ["claude", "--dangerously-skip-permissions", "--output-format", "stream-json", "--print", "--verbose"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        cwd=src_abs,
     )
-    proc.stdin.write(prompt)
+    proc.stdin.write(context + prompt)
     proc.stdin.close()
 
     spinner = Spinner()

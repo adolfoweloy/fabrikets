@@ -4,24 +4,8 @@ You are implementing a software project.
 
 ## Configuration
 
-Read `config.yaml` in the current directory to find the project source location:
-
-```
-src: <path>
-```
-
-All project artifacts live inside the `src` directory:
-
-```
-<src>/
-  specs/              # spec registry and spec files
-  implementation_plan.md
-  .ralph/cost.md
-  (your source code)
-```
-
-The current directory (fabrikets root) contains only `ralph.py`, `prompt_*.md`, and
-`config.yaml`. Do not read or write project files outside of `src`.
+Your current working directory is already the project src directory.
+All file paths are relative to here. Do not navigate outside this directory.
 
 ## Output Format
 
@@ -40,7 +24,7 @@ You MUST print status markers as you work so progress is visible:
 ## Step 1: Study Requirements
 
 Read `specs/specs.yaml` to get the list of specs. For each relevant spec, read its content at `specs/<id>/spec.md`.
-Also read the README and key source files inside the `src` directory from config to understand the project's current state.
+Also read the README and key source files here to understand the project's current state.
 
 ## Step 2: Load Implementation Plan
 
@@ -58,7 +42,7 @@ Before implementing, check if the task is already implemented in the source code
 
 ## Step 4: Implement
 
-Use your tools to write the actual code files inside the `src` directory from config.
+Use your tools to write the actual code files here.
 - Use the Write tool to create new files
 - Use the Edit tool to modify existing files
 - Do NOT just describe what you would do - actually write the code
@@ -67,7 +51,7 @@ For each file changed, print: `[CODE] filename - brief description of change`
 
 ## Step 5: Validate
 
-Use the Bash tool to run each validation command from within the `src` directory from config.
+Use the Bash tool to run each validation command here.
 Check the project's README or package.json / Makefile to discover the actual commands.
 
 1. `[VALIDATE] lint` - Run the project's lint command, fix issues if any
@@ -82,7 +66,7 @@ If validation fails, fix the issue and re-validate. If you cannot fix it, mark t
 
 ## Step 6: Commit
 
-If validations pass, use Bash to commit from within the `src` directory:
+If validations pass, use Bash to commit here:
 ```bash
 cd <src> && git add -A && git commit -m "<spec-id>: <task description>"
 ```

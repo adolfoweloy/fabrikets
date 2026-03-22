@@ -4,23 +4,8 @@ You are creating an implementation plan for a software project. Each invocation 
 
 ## Configuration
 
-Read `config.yaml` in the current directory to find the project source location:
-
-```
-src: <path>
-```
-
-All project artifacts live inside the `src` directory:
-
-```
-<src>/
-  specs/              # spec registry and spec files
-  implementation_plan.md
-  .ralph/cost.md
-```
-
-The current directory (fabrikets root) contains only `ralph.py`, `prompt_*.md`, and
-`config.yaml`. Do not read or write project files outside of `src`.
+Your current working directory is already the project src directory.
+All file paths are relative to here. Do not navigate outside this directory.
 
 ## Step 1: Load Current State
 
