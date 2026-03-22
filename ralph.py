@@ -107,6 +107,9 @@ _status_cfg: dict = {}
 
 
 class StatusBar:
+    def __init__(self):
+        self._paused = False
+
     def start(self, config: dict) -> None:
         global _status_cfg
         _status_cfg = config
@@ -120,7 +123,16 @@ class StatusBar:
         atexit.register(self._teardown)
         threading.Thread(target=self._loop, daemon=True).start()
 
+    def pause(self) -> None:
+        self._paused = True
+
+    def resume(self) -> None:
+        self._paused = False
+        self.refresh()
+
     def refresh(self) -> None:
+        if self._paused:
+            return
         try:
             total = 0.0
             if os.path.exists(".ralph/cost.md"):
@@ -155,6 +167,15 @@ class StatusBar:
 
 
 status_bar = StatusBar()
+
+
+def ask(prompt_text: str) -> str:
+    """input() wrapper that pauses the status bar to avoid display corruption."""
+    status_bar.pause()
+    try:
+        return input(prompt_text)
+    finally:
+        status_bar.resume()
 
 
 def render_markdown(text: str) -> str:
@@ -223,7 +244,7 @@ def ask_choice(question: str, options: list) -> int:
     for i, opt in enumerate(options, 1):
         print(f"  {DIM}{i}.{RESET} {opt}")
     while True:
-        raw = input("> ").strip()
+        raw = ask("> ").strip()
         if raw.isdigit() and 1 <= int(raw) <= len(options):
             return int(raw) - 1
         print(f"  Enter a number from 1 to {len(options)}")
@@ -238,8 +259,8 @@ def to_snake_case(name: str) -> str:
 
 def run_bootstrap() -> dict:
     print("\nWelcome to Fabrikets! No config found — let's set up your project.\n")
-    src = input("Source directory [src]: ").strip() or "src"
-    domain = input("Initial domain group name (e.g. auth, billing, core): ").strip()
+    src = ask("Source directory [src]: ").strip() or "src"
+    domain = ask("Initial domain group name (e.g. auth, billing, core): ").strip()
     os.makedirs(os.path.join(src, domain), exist_ok=True)
     config = {"src": src}
     with open(CONFIG_FILE, "w") as f:
@@ -400,7 +421,7 @@ if mode == "spec":
     existing_spec_content = None
     if mode_choice == 1:
         while True:
-            existing_path = os.path.expanduser(input("Path to existing spec file: ").strip())
+            existing_path = os.path.expanduser(ask("Path to existing spec file: ").strip())
             if os.path.exists(existing_path):
                 with open(existing_path) as f:
                     existing_spec_content = f.read()
@@ -415,12 +436,12 @@ if mode == "spec":
     ) if os.path.isdir(src) else []
     if existing_domains:
         print(f"Existing domains: {', '.join(existing_domains)}")
-    domain = input("Domain group name: ").strip()
+    domain = ask("Domain group name: ").strip()
     if not domain:
         print("Aborted.")
         sys.exit(0)
 
-    feature_raw = input("Feature name: ").strip()
+    feature_raw = ask("Feature name: ").strip()
     if not feature_raw:
         print("Aborted.")
         sys.exit(0)
@@ -493,7 +514,7 @@ if mode == "spec":
                     f.write(f"\n\nAssistant: {response}\n\nArchitect Review:\n{arch_findings}")
                 continue
 
-            user_input = input("You: ").strip()
+            user_input = ask("You: ").strip()
             if user_input.lower() in ("exit", "quit"):
                 break
 
