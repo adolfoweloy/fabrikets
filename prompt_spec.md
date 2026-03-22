@@ -29,8 +29,8 @@ The current directory (fabrikets root) contains only `ralph.py`, `prompt_*.md`, 
 
 Before asking anything, read the existing context:
 
-- Read `specs/specs.yaml` if it exists — understand what's already specified and the status of each
-- For each existing spec, the content lives at `specs/<id>/spec.md` — read 1-2 to understand the format and level of detail
+- Read `<src>/specs.yaml` if it exists — understand what's already specified and the status of each
+- For each existing spec, the content lives at `<src>/<domain>/<feature>.md` (id format: `domain__feature`) — read 1-2 to understand the format and level of detail
 - Glance at the `src` directory from config to understand what's already been built (README, folder structure, key source files)
 
 If none of these exist yet, you're starting a brand new project.
@@ -87,10 +87,11 @@ writing the spec.
 
 ## Step 3: Write the Spec
 
-The spec ID and directory are already created for you — look at the `spec_id` and `spec_dir`
-comments at the top of this file.
+The spec metadata is in the comments at the top of this file:
+- `spec_id` — use this as the id in `specs.yaml` (format: `domain__feature`)
+- `spec_file` — the path of this file; write the final spec content here (replace this conversation with the spec)
 
-Write the spec to `specs/<id>/spec.md`. The spec should cover:
+The spec should cover:
 
 - Overview / purpose
 - Data model or interface (if applicable)
@@ -98,11 +99,11 @@ Write the spec to `specs/<id>/spec.md`. The spec should cover:
 - Edge cases and error handling
 - Any explicit non-goals
 
-Then add the new entry to `specs/specs.yaml` (create it if it doesn't exist):
+Then add the new entry to `<src>/specs.yaml` (create it if it doesn't exist):
 
 ```yaml
 specs:
-  - id: a3f2b1
+  - id: auth__user_login
     description: Brief description of what this spec covers
     status: todo
 ```

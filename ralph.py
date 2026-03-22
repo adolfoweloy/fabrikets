@@ -472,9 +472,13 @@ if mode == "spec":
     else:
         interview_prompt = prompt
 
+    spec_id = f"{domain}__{feature}"
+
     with open(interview_file, "w") as f:
+        f.write(f"<!-- spec_id: {spec_id} -->\n")
         f.write(f"<!-- domain: {domain} -->\n")
-        f.write(f"<!-- feature: {feature} -->\n\n")
+        f.write(f"<!-- feature: {feature} -->\n")
+        f.write(f"<!-- spec_file: {interview_file} -->\n\n")
         f.write(interview_prompt)
 
     print(f"Spec: {interview_file}")
