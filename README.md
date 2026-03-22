@@ -41,7 +41,7 @@ The architect's findings are fed back into the interview so Claude can address t
 
 ### `plan`
 
-Reads `specs/architecture.md` and all spec files, then creates a detailed implementation plan in `implementation_plan.md`. Each run processes one spec. Tasks carry a `refs` field listing which spec files are relevant, so build mode can load only what each task needs.
+Reads `specs/architecture.md` and all spec files, then creates `specs/<domain>/<feature>/implementation_plan.md` for each spec. Tasks carry a `refs` field listing which spec files are relevant, so build mode can load only what each task needs.
 
 ```bash
 uv run ralph.py plan
@@ -50,7 +50,7 @@ uv run ralph.py plan --max-iterations 5
 
 ### `build`
 
-Reads `implementation_plan.md` and implements one task per run — writing code, running validation, committing.
+Scans all `specs/<domain>/<feature>/implementation_plan.md` files and implements one task per run — writing code, running validation, committing.
 
 ```bash
 uv run ralph.py build
@@ -83,7 +83,7 @@ config.yaml           # project configuration (src directory)
       overview.md
       requirements.md
       design.md
-  implementation_plan.md
+      implementation_plan.md
 
 .ralph/
   cost.md             # token usage and cost log per run

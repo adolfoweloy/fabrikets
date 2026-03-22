@@ -11,16 +11,16 @@ All file paths are relative to here. Do not navigate outside this directory.
 
 1. Read `specs/specs.yaml` to see all available specifications
 2. Read `specs/architecture.md` — understand global architecture decisions and patterns that apply across all specs
-3. Read `implementation_plan.md` (create if it doesn't exist)
 
 ## Step 2: Pick a Spec
 
 Find the first spec from `specs/specs.yaml` that needs planning work:
 
-1. **Not in plan yet**: Spec exists in `specs/` but has no entry in `implementation_plan.md`
-2. **Incomplete coverage**: Spec is in the plan, but the spec files contain requirements that don't have corresponding tasks yet (specs evolve - new features get added)
+1. **Not planned yet**: `specs/<domain>/<feature>/implementation_plan.md` does not exist
+2. **Incomplete coverage**: The plan exists but the spec files contain requirements that don't have corresponding tasks yet (specs evolve - new features get added)
 
 To determine incomplete coverage:
+- Read `specs/<domain>/<feature>/implementation_plan.md`
 - Read the spec files thoroughly
 - Compare against existing tasks in the plan
 - If any requirement in the spec lacks a task, this spec needs work
@@ -49,17 +49,16 @@ Study the source code to understand:
 
 ## Step 5: Update Plan
 
-Update `implementation_plan.md` with tasks for this spec. Use YAML format:
+Write tasks to `specs/<domain>/<feature>/implementation_plan.md` (create if it doesn't exist). Use YAML format:
 
 ```yaml
-specs:
-  - id: <spec id>
-    overview: <what will be implemented>
-    status: <overall status>
-    tasks:
-      - task: <comprehensive description>
-        refs: [<spec file(s) relevant to this task>]
-        status: <status>
+id: <spec id>
+overview: <what will be implemented>
+status: <overall status>
+tasks:
+  - task: <comprehensive description>
+    refs: [<spec file(s) relevant to this task>]
+    status: <status>
 ```
 
 ### Task Descriptions
@@ -91,6 +90,8 @@ tasks:
     status: todo
 ```
 
+Since the plan file lives next to the spec files, you can use relative paths in `refs` (e.g. `design.md`) or full paths from src root (e.g. `specs/auth/user_login/design.md`). Full paths are preferred for clarity.
+
 ### Status Values
 
 | Status | Meaning |
@@ -116,7 +117,7 @@ Print: `[UPDATED] <domain>/<feature>` if you modified a spec.
 Commit your changes so the next iteration can see the updated state:
 
 ```bash
-git add implementation_plan.md specs/
+git add specs/
 git commit -m "plan: <domain>/<feature> - <brief summary>"
 ```
 

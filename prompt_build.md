@@ -21,19 +21,27 @@ You MUST print status markers as you work so progress is visible:
 [STATUS] spec-name: task description -> done | blocked | todo
 ```
 
-## Step 1: Study Requirements
+## Step 1: Find the Next Task
 
-Read `specs/specs.yaml` to get the list of specs. For each relevant spec, read its content at `specs/<id>/spec.md`.
-Also read the README and key source files here to understand the project's current state.
+Read `specs/specs.yaml` to get all specs. For each spec (in order), check if
+`specs/<domain>/<feature>/implementation_plan.md` exists and has a task with `status: todo`.
 
-## Step 2: Load Implementation Plan
+Pick the first todo task found. Read the README and key source files to understand the project's current state.
 
-Read `implementation_plan.md` at the root of this repository. The plan uses YAML format with specs and tasks.
+Print: `[TASK] <domain>/<feature>: task description`
+
+## Step 2: Load Context
+
+For the chosen task, read its `refs` to load only what is needed:
+- Each file listed in the task's `refs` field (e.g. `specs/<domain>/<feature>/design.md`)
+- `specs/architecture.md` if not already in refs
 
 ## Step 3: Pick a Task
 
-Find the first task with `status: todo` from a spec with `status: todo`.
-Print: `[TASK] spec-name: task description`
+Before implementing, check if the task is already implemented in the source code. If so:
+1. Mark the task as `done` in `specs/<domain>/<feature>/implementation_plan.md`
+2. Print: `[STATUS] <domain>/<feature>: task description -> done (already implemented)`
+3. Output `[PROGRESS]` and end your response (the outer loop will call you again for the next task)
 
 Before implementing, check if the task is already implemented in the source code. If so:
 1. Mark the task as `done` in `implementation_plan.md`
@@ -75,11 +83,11 @@ Example: `a3f2b1: implement user login and session creation`
 
 ## Step 7: Update Plan
 
-Use the Edit tool to update `implementation_plan.md`:
+Use the Edit tool to update `specs/<domain>/<feature>/implementation_plan.md`:
 - Set the task's status to `done` (or `blocked` if it failed)
-- If all tasks in a spec are done, set the spec's status to `done`
+- If all tasks are done, set the top-level `status` to `done`
 
-Print: `[STATUS] spec-name: task description -> done` (or `blocked`)
+Print: `[STATUS] <domain>/<feature>: task description -> done` (or `blocked`)
 
 ## Step 8: Record Operational Learnings
 
