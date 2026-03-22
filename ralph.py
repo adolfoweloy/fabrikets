@@ -202,7 +202,7 @@ else:
 
 os.makedirs(config["src"], exist_ok=True)
 
-TRACKED_FILES = ["implementation_plan.md", "specs/", config["src"]]
+TRACKED_FILES = [config["src"]]
 
 if not os.path.exists(prompt_file):
     print(f"Error: {prompt_file} not found", file=sys.stderr)
