@@ -399,13 +399,14 @@ if mode == "spec":
 
     existing_spec_content = None
     if mode_choice == 1:
-        existing_path = input("Path to existing spec file: ").strip()
-        if not os.path.exists(existing_path):
-            print(f"File not found: {existing_path}")
-            sys.exit(1)
-        with open(existing_path) as f:
-            existing_spec_content = f.read()
-        print(f"Loaded: {existing_path}")
+        while True:
+            existing_path = input("Path to existing spec file: ").strip()
+            if os.path.exists(existing_path):
+                with open(existing_path) as f:
+                    existing_spec_content = f.read()
+                print(f"Loaded: {existing_path}")
+                break
+            print(f"  File not found: {existing_path} (Ctrl+C to exit)")
 
     # Domain and feature name
     existing_domains = sorted(
