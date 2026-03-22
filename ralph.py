@@ -400,7 +400,7 @@ if mode == "spec":
     existing_spec_content = None
     if mode_choice == 1:
         while True:
-            existing_path = input("Path to existing spec file: ").strip()
+            existing_path = os.path.expanduser(input("Path to existing spec file: ").strip())
             if os.path.exists(existing_path):
                 with open(existing_path) as f:
                     existing_spec_content = f.read()
