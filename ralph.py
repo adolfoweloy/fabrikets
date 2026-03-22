@@ -220,13 +220,7 @@ def load_config() -> dict:
 def run_bootstrap() -> dict:
     print("\nWelcome to Fabrikets! No config found — let's set up your project.\n")
     src = input("Source directory [src]: ").strip() or "src"
-    if not os.path.exists(src):
-        ans = input(f"'{src}' doesn't exist. Create it? [y/N] ").strip().lower()
-        if ans in ("y", "yes"):
-            os.makedirs(src, exist_ok=True)
-        else:
-            print("Aborted.")
-            sys.exit(0)
+    os.makedirs(src, exist_ok=True)
     config = {"src": src}
     with open(CONFIG_FILE, "w") as f:
         for k, v in config.items():
@@ -376,7 +370,9 @@ def show_file_diff(before: str, after: str) -> None:
 
 # Spec mode: interactive interview with Claude to create/add a spec
 if mode == "spec":
-    if os.path.exists("specs/specs.yaml"):
+    src = config["src"]
+    specs_yaml = os.path.join(src, "specs", "specs.yaml")
+    if os.path.exists(specs_yaml):
         question = "Start an interview with Claude to add a new specification? [y/N] "
     else:
         question = "No specs found. Start an interview with Claude to create a new specification? [y/N] "
@@ -386,10 +382,10 @@ if mode == "spec":
         sys.exit(0)
 
     spec_id = uuid.uuid4().hex[:6]
-    spec_dir = f"specs/{spec_id}"
+    spec_dir = os.path.join(src, "specs", spec_id)
     os.makedirs(spec_dir, exist_ok=True)
 
-    interview_file = f"{spec_dir}/interview.md"
+    interview_file = os.path.join(spec_dir, "interview.md")
     with open(interview_file, "w") as f:
         f.write(f"<!-- spec_id: {spec_id} -->\n")
         f.write(f"<!-- spec_dir: {spec_dir} -->\n\n")
