@@ -10,13 +10,20 @@ below under "Conversation so far".
 Your current working directory is already the project src directory (see `fabrikets_src` in the context header).
 All file paths are relative to here. Do not navigate outside this directory.
 
+The spec metadata is in the comments at the top of this file:
+- `spec_id` — the identifier for this spec (format: `domain__feature`)
+- `domain` — the domain group
+- `feature` — the feature name
+- `spec_dir` — the directory where spec files will be written (e.g. `specs/auth/user_login/`)
+
 ## Step 1: Understand the Project
 
 Before asking anything, read the existing context:
 
-- Read `<src>/specs.yaml` if it exists — understand what's already specified and the status of each
-- For each existing spec, the content lives at `<src>/<domain>/<feature>.md` (id format: `domain__feature`) — read 1-2 to understand the format and level of detail
-- Glance at the `src` directory from config to understand what's already been built (README, folder structure, key source files)
+- Read `specs/architecture.md` if it exists — understand the global architecture decisions and patterns already established
+- Read `specs/specs.yaml` if it exists — understand what's already specified and the status of each
+- For 1-2 existing specs, read their `overview.md` to understand the format and level of detail
+- Glance at the src directory to understand what's already been built (README, folder structure, key source files)
 
 If none of these exist yet, you're starting a brand new project.
 
@@ -70,21 +77,80 @@ subagent that reviews the requirements for tradeoffs and risks. Its findings wil
 appended to this conversation as "Architect Review:" for you to incorporate before
 writing the spec.
 
-## Step 3: Write the Spec
+## Step 3: Write the Spec Files
 
-The spec metadata is in the comments at the top of this file:
-- `spec_id` — use this as the id in `specs.yaml` (format: `domain__feature`)
-- `spec_file` — the path of this file; write the final spec content here (replace this conversation with the spec)
+Write three files to `<spec_dir>/`:
 
-The spec should cover:
+### `<spec_dir>/overview.md`
 
-- Overview / purpose
-- Data model or interface (if applicable)
-- Behavior and rules
-- Edge cases and error handling
-- Any explicit non-goals
+A concise 1-page summary of the feature. Must include:
+- Purpose and scope (2-3 sentences)
+- Key design decisions made
+- Non-goals (what this explicitly does NOT do)
+- References to the other files:
+  ```
+  - Requirements: [requirements.md](requirements.md)
+  - Design: [design.md](design.md)
+  ```
 
-Then add the new entry to `<src>/specs.yaml` (create it if it doesn't exist):
+Keep this under ~100 lines. This file is always loaded — keep it tight.
+
+### `<spec_dir>/requirements.md`
+
+All functional and non-functional requirements. Structure as:
+
+```markdown
+## Functional Requirements
+
+### <Use Case Name>
+- <requirement>
+- <requirement>
+
+## Non-Functional Requirements
+
+| Concern | Requirement |
+|---------|-------------|
+| Performance | ... |
+| Scalability | ... |
+| Security | ... |
+| Reliability | ... |
+| Observability | ... |
+```
+
+Be specific and testable. No prose — bullet points and tables only.
+
+### `<spec_dir>/design.md`
+
+Design decisions, data model, interfaces, and component interactions:
+
+```markdown
+## Data Model
+<types, schemas, or database tables>
+
+## Interfaces
+<API contracts, function signatures, message formats>
+
+## Component Design
+<how this fits into the existing architecture, key components, sequence flows>
+
+## Key Decisions
+<decisions made and why, with alternatives considered>
+```
+
+## Step 4: Update Global Architecture
+
+Read `specs/architecture.md` (create if it doesn't exist).
+
+Add or refine entries that reflect system-wide patterns, decisions, or constraints
+established or confirmed by this spec. This file captures cross-cutting concerns that
+affect multiple features — things like: chosen tech stack, data storage strategy,
+auth model, API conventions, error handling patterns, deployment constraints.
+
+Do NOT copy per-feature detail here. Only add what is genuinely global.
+
+## Step 5: Register the Spec
+
+Add the new entry to `specs/specs.yaml` (create if it doesn't exist):
 
 ```yaml
 specs:
@@ -97,7 +163,7 @@ specs:
 
 Valid status values: `todo`, `wip`, `done`.
 
-## Step 4: Confirm and Finish
+## Step 6: Confirm and Finish
 
 Show the user a brief summary of what you wrote and ask if it captures what they want.
 Offer to refine based on their feedback.

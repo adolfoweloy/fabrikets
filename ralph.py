@@ -159,7 +159,7 @@ def load_config() -> dict:
             line = line.strip()
             if line and not line.startswith("#"):
                 key, _, value = line.partition(":")
-                config[key.strip()] = value.strip()
+                config[key.strip()] = os.path.expanduser(value.strip())
     return config
 
 
@@ -339,6 +339,7 @@ def show_file_diff(before: str, after: str) -> None:
 # Spec mode: interactive interview with Claude to create/add a spec
 if mode == "spec":
     src = config["src"]
+    specs_dir = os.path.join(src, "specs")
 
     mode_choice = ask_choice(
         "How would you like to start?",
@@ -358,9 +359,9 @@ if mode == "spec":
 
     # Domain and feature name
     existing_domains = sorted(
-        d for d in os.listdir(src)
-        if os.path.isdir(os.path.join(src, d)) and not d.startswith(".")
-    ) if os.path.isdir(src) else []
+        d for d in os.listdir(specs_dir)
+        if os.path.isdir(os.path.join(specs_dir, d)) and not d.startswith(".")
+    ) if os.path.isdir(specs_dir) else []
     if existing_domains:
         print(f"Existing domains: {', '.join(existing_domains)}")
     domain = to_snake_case(ask("Domain group name: ").strip())
@@ -374,9 +375,9 @@ if mode == "spec":
         sys.exit(0)
     feature = to_snake_case(feature_raw)
 
-    domain_dir = os.path.join(src, domain)
-    os.makedirs(domain_dir, exist_ok=True)
-    interview_file = os.path.join(domain_dir, f"{feature}.md")
+    spec_dir = os.path.join(specs_dir, domain, feature)
+    os.makedirs(spec_dir, exist_ok=True)
+    interview_file = os.path.join(spec_dir, "_interview.md")
 
     if os.path.exists(interview_file):
         print(f"Spec already exists: {interview_file}")
@@ -399,15 +400,16 @@ if mode == "spec":
         interview_prompt = prompt
 
     spec_id = f"{domain}__{feature}"
+    spec_dir_rel = os.path.join("specs", domain, feature)  # relative to src
 
     with open(interview_file, "w") as f:
         f.write(f"<!-- spec_id: {spec_id} -->\n")
         f.write(f"<!-- domain: {domain} -->\n")
         f.write(f"<!-- feature: {feature} -->\n")
-        f.write(f"<!-- spec_file: {interview_file} -->\n\n")
+        f.write(f"<!-- spec_dir: {spec_dir_rel} -->\n\n")
         f.write(interview_prompt)
 
-    print(f"Spec: {interview_file}")
+    print(f"Spec: {spec_dir_rel}/")
 
     try:
         while True:

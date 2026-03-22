@@ -10,36 +10,40 @@ All file paths are relative to here. Do not navigate outside this directory.
 ## Step 1: Load Current State
 
 1. Read `specs/specs.yaml` to see all available specifications
-2. Read `implementation_plan.md` (create if it doesn't exist)
+2. Read `specs/architecture.md` — understand global architecture decisions and patterns that apply across all specs
+3. Read `implementation_plan.md` (create if it doesn't exist)
 
 ## Step 2: Pick a Spec
 
 Find the first spec from `specs/specs.yaml` that needs planning work:
 
 1. **Not in plan yet**: Spec exists in `specs/` but has no entry in `implementation_plan.md`
-2. **Incomplete coverage**: Spec is in the plan, but the spec file contains requirements that don't have corresponding tasks yet (specs evolve - new features get added)
+2. **Incomplete coverage**: Spec is in the plan, but the spec files contain requirements that don't have corresponding tasks yet (specs evolve - new features get added)
 
 To determine incomplete coverage:
-- Read the spec file thoroughly
+- Read the spec files thoroughly
 - Compare against existing tasks in the plan
 - If any requirement in the spec lacks a task, this spec needs work
 
-If ALL specs are fully covered (every requirement has a task), output "stop".
+If ALL specs are fully covered (every requirement has a task), output `[STOP]`.
 
-Print: `[SPEC] spec-filename.md`
+Print: `[SPEC] <domain>/<feature>`
 
 ## Step 3: Study the Spec
 
-Read `specs/<id>/spec.md` in detail. Understand:
-- What needs to be implemented
-- Edge cases and error handling
-- Input/output expectations
+For the chosen spec, derive the directory path from its `domain` and `feature` fields in specs.yaml:
+`specs/<domain>/<feature>/`
 
-If the spec references other specs, read those too for context.
+Read all three files:
+- `specs/<domain>/<feature>/overview.md` — start here for purpose and key decisions
+- `specs/<domain>/<feature>/requirements.md` — full functional and non-functional requirements
+- `specs/<domain>/<feature>/design.md` — data model, interfaces, component design
+
+If the spec references other specs, read their `overview.md` for context.
 
 ## Step 4: Check Source Code
 
-Study the source code in the `src` directory from config to understand:
+Study the source code to understand:
 - What is already implemented for this spec
 - What is missing or incomplete
 
@@ -54,6 +58,7 @@ specs:
     status: <overall status>
     tasks:
       - task: <comprehensive description>
+        refs: [<spec file(s) relevant to this task>]
         status: <status>
 ```
 
@@ -68,6 +73,24 @@ Each task description MUST be comprehensive and self-contained. Include:
 Bad: `Create User interface`
 Good: `Create User interface with fields: id (UUID, generated on creation), email (string, unique, validated as RFC 5321 address), role (admin|member|viewer), createdAt (ISO 8601 timestamp, set server-side)`
 
+### refs field
+
+Each task should list which spec files are relevant to it, so build mode loads only what it needs:
+- `specs/<domain>/<feature>/requirements.md` — for tasks implementing a specific requirement
+- `specs/<domain>/<feature>/design.md` — for tasks implementing data models, interfaces, or component structure
+- `specs/architecture.md` — for tasks that must follow a global architectural pattern
+
+Example:
+```yaml
+tasks:
+  - task: >
+      Create User model with fields: id (UUID), email (string, unique, RFC 5321), ...
+    refs:
+      - specs/auth/user_login/design.md
+      - specs/architecture.md
+    status: todo
+```
+
 ### Status Values
 
 | Status | Meaning |
@@ -77,31 +100,16 @@ Good: `Create User interface with fields: id (UUID, generated on creation), emai
 | blocked | Cannot proceed |
 | cancelled | No longer needed |
 
-### Example
-
-```yaml
-specs:
-  - id: a3f2b1
-    overview: Implement user authentication and session management
-    status: todo
-    tasks:
-      - task: >
-          Create User interface with fields: id (UUID, generated on creation),
-          email (string, unique, validated as RFC 5321 address), passwordHash (string),
-          role (admin|member|viewer), createdAt (ISO 8601 timestamp, set server-side)
-        status: todo
-```
-
 ## Step 6: Update Specs (if needed)
 
-If you discover missing details that should be in the spec, update `specs/<id>/spec.md`:
-- Missing edge cases
-- Behavior details not covered
-- API conventions we should follow
+If you discover missing details that should be in the spec, update the relevant file:
+- Missing edge cases → `requirements.md`
+- Unclear design decisions → `design.md`
+- Updated summary → `overview.md`
 
 Keep specs concise but complete.
 
-Print: `[UPDATED] <id>` if you modified a spec.
+Print: `[UPDATED] <domain>/<feature>` if you modified a spec.
 
 ## Step 7: Commit
 
@@ -109,10 +117,8 @@ Commit your changes so the next iteration can see the updated state:
 
 ```bash
 git add implementation_plan.md specs/
-git commit -m "plan: <spec-filename> - <brief summary>"
+git commit -m "plan: <domain>/<feature> - <brief summary>"
 ```
-
-Example: `plan: storage.md - added tasks for label extraction methods`
 
 ## Step 8: Output Status
 
