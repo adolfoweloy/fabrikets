@@ -121,7 +121,7 @@ def render_markdown(text: str) -> str:
         lines.append(line)
     return "\n".join(lines)
 
-CONTEXT_WINDOW = 200_000
+CONTEXT_WINDOW = 100_000  # target 50% of 200K hard limit to stay in the smart zone
 CONFIG_FILE = "config.yaml"
 
 # Parse arguments
