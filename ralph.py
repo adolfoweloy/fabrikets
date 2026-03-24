@@ -130,10 +130,30 @@ max_iterations = 1
 debug = False
 project_name = None
 
+def print_help():
+    print("""
+Usage: ralph.py <command> [options]
+
+Commands:
+  spec        Interview Claude to define a new feature spec (default)
+  plan        Generate implementation plans from existing specs
+  build       Implement tasks from implementation plans
+  bootstrap   Register a new project in config.yaml
+
+Options:
+  -p, --project NAME      Project to work on (as registered in config.yaml)
+  --max-iterations N      Max number of specs/tasks to process per run (default: 1)
+  -d, --debug             Show full tool call details from Claude
+  -h, --help              Show this help message
+""")
+
 args = sys.argv[1:]
 i = 0
 while i < len(args):
-    if args[i] == "--max-iterations":
+    if args[i] in ("-h", "--help"):
+        print_help()
+        sys.exit(0)
+    elif args[i] == "--max-iterations":
         i += 1
         max_iterations = int(args[i])
     elif args[i] in ("spec", "plan", "build", "bootstrap"):
@@ -145,7 +165,7 @@ while i < len(args):
         project_name = args[i]
     else:
         print(f"Error: unknown argument '{args[i]}'", file=sys.stderr)
-        print("Usage: ./ralph.py [spec|plan|build|bootstrap] [-p PROJECT] [-d] [--max-iterations N]", file=sys.stderr)
+        print("Run './ralph.py --help' for usage.", file=sys.stderr)
         sys.exit(1)
     i += 1
 
