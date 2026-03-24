@@ -98,7 +98,30 @@ If you discovered something useful for future development, append to `AGENTS.md`
 
 Do NOT record implementation details or business logic.
 
-## Step 9: Output Status
+## Step 9: Update README
+
+Create or update `README.md` in the project root if this task changed something a developer would need to know.
+
+If `README.md` does not exist, create it with this structure:
+```markdown
+# <project name>
+
+## Description
+<what this project does>
+
+## How to run
+<commands to start the project>
+
+## How to build
+<commands to build, compile, or package>
+
+## Architecture overview
+<key components, how they fit together>
+```
+
+Only update if the task affected something in one of these sections — a new service, a changed entry point, a new build step, a new component. Skip this step for tasks that only change internal implementation details.
+
+## Step 10: Output Status
 
 You MUST output exactly one of these status markers at the end of your response:
 
@@ -108,8 +131,8 @@ You MUST output exactly one of these status markers at the end of your response:
 
 ## Status Rules
 
-- Output `[PROGRESS]` after completing Steps 3-8 for one task
-- Output `[STOP]` only when Step 3 finds no tasks with `status: todo`
+- Output `[PROGRESS]` after completing Steps 3-9 for one task
+- Output `[STOP]` only when Step 1 finds no tasks with `status: todo`
 - If you cannot do any work (unclear requirements, need input), output `[STOP]` and explain why
 
 This keeps each invocation focused on a single task.
