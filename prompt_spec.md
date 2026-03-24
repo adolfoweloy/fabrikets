@@ -163,7 +163,18 @@ specs:
 
 Valid status values: `todo`, `wip`, `done`.
 
-## Step 6: Confirm and Finish
+## Step 6: Commit
+
+Commit the spec files so they are versioned in the project repository:
+
+```bash
+git add specs/
+git commit -m "spec: <domain>/<feature> - <brief summary>"
+```
+
+Example: `spec: auth/user_login - user authentication with session management`
+
+## Step 7: Confirm and Finish
 
 Show the user a brief summary of what you wrote and ask if it captures what they want.
 Offer to refine based on their feedback.
