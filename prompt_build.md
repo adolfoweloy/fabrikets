@@ -26,7 +26,10 @@ You MUST print status markers as you work so progress is visible:
 Read `specs/specs.yaml` to get all specs. For each spec (in order), check if
 `specs/<domain>/<feature>/implementation_plan.md` exists and has a task with `status: todo`.
 
-Pick the first todo task found. Read the README and key source files to understand the project's current state.
+- If a spec has no `implementation_plan.md`, **skip it** — creating plans is not your job (that is plan mode's job).
+- **If no todo task exists across all specs**, output `[STOP]` and stop here. There is nothing left to do.
+
+Otherwise, pick the first todo task found. Read the README and key source files to understand the project's current state.
 
 Print: `[TASK] <domain>/<feature>: task description`
 
@@ -36,16 +39,11 @@ For the chosen task, read its `refs` to load only what is needed:
 - Each file listed in the task's `refs` field (e.g. `specs/<domain>/<feature>/design.md`)
 - `specs/architecture.md` if not already in refs
 
-## Step 3: Pick a Task
+## Step 3: Check if Already Implemented
 
 Before implementing, check if the task is already implemented in the source code. If so:
 1. Mark the task as `done` in `specs/<domain>/<feature>/implementation_plan.md`
 2. Print: `[STATUS] <domain>/<feature>: task description -> done (already implemented)`
-3. Output `[PROGRESS]` and end your response (the outer loop will call you again for the next task)
-
-Before implementing, check if the task is already implemented in the source code. If so:
-1. Mark the task as `done` in `implementation_plan.md`
-2. Print: `[STATUS] spec-name: task description -> done (already implemented)`
 3. Output `[PROGRESS]` and end your response (the outer loop will call you again for the next task)
 
 ## Step 4: Implement
