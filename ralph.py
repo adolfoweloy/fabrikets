@@ -215,7 +215,7 @@ prompt = open(prompt_file).read()
 def get_files_hash() -> str:
     try:
         result = subprocess.run(
-            f"find {' '.join(TRACKED_FILES)} -type f 2>/dev/null | xargs md5sum 2>/dev/null | sort",
+            f"find {' '.join(TRACKED_FILES)} -not -path '*/.git/*' -type f 2>/dev/null | xargs md5sum 2>/dev/null | sort",
             shell=True, capture_output=True, text=True
         )
         return result.stdout
