@@ -7,6 +7,7 @@
 3. There should be an option to list current specs for a project.
 4. During the build phase, show progress as "step X of N" so the user knows where they are relative to --max-iterations.
 5. Specs should have a priority field (low/medium/high). During the interview phase, the LLM should collect this via a selectable input tool (e.g. AskUserQuestion with predefined options), so the user can pick from low, medium, or high.
+6. config.yaml should probably be stored in a ~/.ralph directory.
 
 ## Done
 
