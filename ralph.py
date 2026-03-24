@@ -272,11 +272,14 @@ def run_claude(prompt: str, debug: bool = False) -> list:
                         spinner.stop()
                         print(render_markdown(text), end="", flush=True)
                 elif block.get("type") == "tool_use":
+                    spinner.stop()
+                    name = block.get("name", "")
+                    summary = format_tool_input(name, block.get("input", {}))
                     if debug:
-                        spinner.stop()
-                        name = block.get("name", "")
-                        summary = format_tool_input(name, block.get("input", {}))
                         print(f"{CYAN}[{name}] {summary}{RESET}")
+                    else:
+                        print(f"{DIM}  [{name}] {summary}{RESET}")
+                    spinner.start()
         elif obj_type == "user":
             for block in obj.get("message", {}).get("content", []):
                 if block.get("type") == "tool_result" and block.get("is_error"):
@@ -285,6 +288,8 @@ def run_claude(prompt: str, debug: bool = False) -> list:
                     if isinstance(content, list):
                         content = " ".join(b.get("text", "") for b in content)
                     print(f"{RED}  ERROR: {str(content)[:150]}{RESET}")
+
+        spinner.start()
 
     spinner.stop()
     proc.wait()

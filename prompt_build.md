@@ -35,9 +35,11 @@ Print: `[TASK] <domain>/<feature>: task description`
 
 ## Step 2: Load Context
 
-For the chosen task, read its `refs` to load only what is needed:
-- Each file listed in the task's `refs` field (e.g. `specs/<domain>/<feature>/design.md`)
-- `specs/architecture.md` if not already in refs
+For the chosen task, always read:
+- `specs/<domain>/<feature>/design.md` — data model, interfaces, component design
+- `specs/architecture.md` — global architecture decisions
+
+Then read any additional files listed in the task's `refs` field that aren't already covered above.
 
 ## Step 3: Check if Already Implemented
 

@@ -121,11 +121,16 @@ Since the plan file lives next to the spec files, you can use relative paths in 
 | blocked | Cannot proceed |
 | cancelled | No longer needed |
 
-## Step 6: Update Specs (if needed)
+## Step 6: Update design.md
 
-If you discover missing details that should be in the spec, update the relevant file:
-- Missing edge cases → `requirements.md`
-- Unclear design decisions → `design.md`
+Update `specs/<domain>/<feature>/design.md` with any decisions or discoveries made while planning:
+- Implementation approach and component ordering
+- Patterns or conventions adopted from the existing codebase
+- Design decisions that were implicit in the spec but now made explicit
+- Missing edge cases or error flows discovered while thinking through tasks
+
+Also update other spec files if needed:
+- New constraints or edge cases → `requirements.md`
 - Updated summary → `overview.md`
 
 Keep specs concise but complete.
