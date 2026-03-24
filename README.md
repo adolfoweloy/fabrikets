@@ -2,18 +2,40 @@
 
 An AI-driven development loop. Define specs, plan tasks, build — each stage driven by Claude.
 
-## Stages
+## Prerequisites
 
-### `spec` (default)
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/)
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (`claude`) — installed and authenticated
 
-Starts an interactive interview with Claude to define a new specification. Claude reads your existing project context, asks structured questions covering functional and non-functional requirements, triggers an architect subagent for review, then writes the spec files to disk.
+## Getting started
+
+```bash
+git clone <this repo>
+cd fabrica
+uv run ralph.py
+```
+
+On first run, a bootstrap wizard asks for:
+- **Source directory** — path to your project (e.g. `~/src/my-app`)
+- **Initial domain group** — a name for the first domain (e.g. `auth`, `billing`, `core`)
+
+This creates `config.yaml` and you're ready to go.
+
+## Workflow
+
+The typical flow is: **spec → plan → build**.
+
+### 1. `spec` — define what to build
 
 ```bash
 uv run ralph.py
 uv run ralph.py spec
 ```
 
-Each interview creates a directory under `<src>/specs/<domain>/<feature>/` with three files:
+Claude interviews you to define a new feature spec. It reads your existing project context, asks structured questions covering functional and non-functional requirements, triggers an architect subagent for review, then writes the spec files to disk.
+
+Each interview creates a directory under `<src>/specs/<domain>/<feature>/`:
 
 ```
 <src>/specs/
@@ -27,8 +49,6 @@ Each interview creates a directory under `<src>/specs/<domain>/<feature>/` with 
       design.md                # data model, interfaces, component design
 ```
 
-`overview.md` references the other files in the same directory. `architecture.md` captures cross-cutting concerns — tech stack, auth model, API conventions — and is refined with every new spec.
-
 #### Architect subagent
 
 Once Claude has gathered enough requirements, it automatically triggers an architect subagent. The architect analyses the requirements and returns a structured review covering:
@@ -39,23 +59,23 @@ Once Claude has gathered enough requirements, it automatically triggers an archi
 
 The architect's findings are fed back into the interview so Claude can address them before finalising the spec.
 
-### `plan`
-
-Reads `specs/architecture.md` and all spec files, then creates `specs/<domain>/<feature>/implementation_plan.md` for each spec. Tasks carry a `refs` field listing which spec files are relevant, so build mode can load only what each task needs.
+### 2. `plan` — break it into tasks
 
 ```bash
 uv run ralph.py plan
 uv run ralph.py plan --max-iterations 5
 ```
 
-### `build`
+Reads `specs/architecture.md` and all spec files, then creates `specs/<domain>/<feature>/implementation_plan.md` for each spec. Tasks carry a `refs` field listing which spec files are relevant, so build mode can load only what each task needs.
 
-Scans all `specs/<domain>/<feature>/implementation_plan.md` files and implements one task per run — writing code, running validation, committing.
+### 3. `build` — implement
 
 ```bash
 uv run ralph.py build
 uv run ralph.py build --max-iterations 10
 ```
+
+Scans all `specs/<domain>/<feature>/implementation_plan.md` files and implements one task per run — writing code, running validation, committing.
 
 ## Options
 
@@ -98,5 +118,6 @@ The `.claude/` directory contains project-level configuration for Claude Code.
 | Command | Description |
 |---------|-------------|
 | `/idea <text>` | Appends an idea to `ISSUES.md` under the Open section |
+| `/ideas` | Lists all open ideas from `ISSUES.md` |
 
 To use commands, open this project in Claude Code and type `/idea your thought here`.
