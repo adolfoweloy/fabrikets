@@ -143,5 +143,6 @@ The `.claude/` directory contains project-level configuration for Claude Code.
 |---------|-------------|
 | `/idea <text>` | Appends an idea to `ISSUES.md` under the Open section |
 | `/ideas` | Lists all open ideas from `ISSUES.md` |
+| `/idea-done <N>` | Moves idea number N from Open to Done in `ISSUES.md` |
 
 To use commands, open this project in Claude Code and type `/idea your thought here`.
