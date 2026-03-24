@@ -1,3 +1,5 @@
-Add the following idea to ISSUES.md under the `## Open` section as a new bullet point:
+Add the following idea to ISSUES.md under the `## Open` section as a new numbered item.
 
-$ARGUMENTS
+Read the current list, find the last number used, and append the new item with the next number.
+
+Idea to add: $ARGUMENTS
