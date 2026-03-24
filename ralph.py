@@ -525,13 +525,15 @@ if mode == "spec":
 # Main loop
 try:
     for iteration in range(1, max_iterations + 1):
-        print(f"\n=== Iteration {iteration}/{max_iterations} starting at {datetime.now().strftime('%c')} ===")
+        iter_start = datetime.now()
+        print(f"\n=== Iteration {iteration}/{max_iterations} starting at {iter_start.strftime('%c')} ===")
         before_hash = get_files_hash()
 
         print("Sending prompt to Claude...")
         print("\n--- Claude's response ---")
         objects = run_claude(prompt, debug=debug)
-        print("\n--- End response ---\n")
+        elapsed = (datetime.now() - iter_start).seconds
+        print(f"\n--- End response --- ({elapsed // 60}m {elapsed % 60}s)\n")
 
         append_cost(objects)
 
