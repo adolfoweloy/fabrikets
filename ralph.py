@@ -523,6 +523,7 @@ if mode == "spec":
     sys.exit(0)
 
 # Main loop
+loop_start = datetime.now()
 try:
     for iteration in range(1, max_iterations + 1):
         iter_start = datetime.now()
@@ -570,3 +571,6 @@ try:
         time.sleep(2)
 except KeyboardInterrupt:
     print("\n\nSee ya!")
+finally:
+    total = (datetime.now() - loop_start).seconds
+    print(f"\nTotal elapsed: {total // 60}m {total % 60}s")
