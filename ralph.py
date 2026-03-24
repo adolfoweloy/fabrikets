@@ -136,7 +136,7 @@ while i < len(args):
     if args[i] == "--max-iterations":
         i += 1
         max_iterations = int(args[i])
-    elif args[i] in ("spec", "plan", "build"):
+    elif args[i] in ("spec", "plan", "build", "bootstrap"):
         mode = args[i]
     elif args[i] in ("-d", "--debug"):
         debug = True
@@ -145,12 +145,12 @@ while i < len(args):
         project_name = args[i]
     else:
         print(f"Error: unknown argument '{args[i]}'", file=sys.stderr)
-        print("Usage: ./ralph.py [spec|plan|build] [-p PROJECT] [-d] [--max-iterations N]", file=sys.stderr)
+        print("Usage: ./ralph.py [spec|plan|build|bootstrap] [-p PROJECT] [-d] [--max-iterations N]", file=sys.stderr)
         sys.exit(1)
     i += 1
 
 prompt_files = {"spec": "prompt_spec.md", "plan": "prompt_plan.md", "build": "prompt_build.md"}
-prompt_file = prompt_files[mode]
+prompt_file = prompt_files.get(mode)
 
 os.makedirs(".ralph", exist_ok=True)
 print_logo()
@@ -221,9 +221,13 @@ def run_bootstrap() -> str:
 
 def resolve_project() -> str:
     """Resolve the src directory for the active project. Exits on error."""
+    if mode == "bootstrap":
+        src = run_bootstrap()
+        sys.exit(0)
+
     if not os.path.exists(CONFIG_FILE):
         if project_name:
-            print(f"Error: no config found. Run ralph with no arguments to register a project.", file=sys.stderr)
+            print(f"Error: no config found. Run 'ralph.py bootstrap' to register a project.", file=sys.stderr)
             sys.exit(1)
         return run_bootstrap()
 
@@ -233,7 +237,7 @@ def resolve_project() -> str:
     if project_name:
         if project_name not in projects:
             print(f"Error: project '{project_name}' not found.", file=sys.stderr)
-            print("Run ralph with no arguments to register a new project.", file=sys.stderr)
+            print("Run 'ralph.py bootstrap' to register a new project.", file=sys.stderr)
             if projects:
                 print("\nAvailable projects:", file=sys.stderr)
                 for n, p in projects.items():
@@ -260,8 +264,8 @@ os.makedirs(src, exist_ok=True)
 
 TRACKED_FILES = [src]
 
-if not os.path.exists(prompt_file):
-    print(f"Error: {prompt_file} not found", file=sys.stderr)
+if not prompt_file or not os.path.exists(prompt_file):
+    print(f"Error: prompt file for '{mode}' not found", file=sys.stderr)
     sys.exit(1)
 
 print(f"Running in {mode} mode using {prompt_file}")

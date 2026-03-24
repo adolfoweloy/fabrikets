@@ -24,7 +24,11 @@ Source directory: ~/src/open-mcp-dev
 Initial domain group name (e.g. auth, billing, core): auth
 ```
 
-This creates `config.yaml` with the project registered. To add more projects later, run ralph with no arguments again.
+This creates `config.yaml` with the project registered. To register additional projects later:
+
+```bash
+uv run ralph.py bootstrap
+```
 
 ## Working with multiple projects
 
