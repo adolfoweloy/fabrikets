@@ -128,6 +128,7 @@ CONFIG_FILE = "config.yaml"
 mode = "spec"
 max_iterations = 1
 debug = False
+project_name = None
 
 args = sys.argv[1:]
 i = 0
@@ -139,9 +140,12 @@ while i < len(args):
         mode = args[i]
     elif args[i] in ("-d", "--debug"):
         debug = True
+    elif args[i] in ("-p", "--project"):
+        i += 1
+        project_name = args[i]
     else:
         print(f"Error: unknown argument '{args[i]}'", file=sys.stderr)
-        print("Usage: ./ralph.py [spec|plan|build] [-d] [--max-iterations N]", file=sys.stderr)
+        print("Usage: ./ralph.py [spec|plan|build] [-p PROJECT] [-d] [--max-iterations N]", file=sys.stderr)
         sys.exit(1)
     i += 1
 
@@ -153,14 +157,30 @@ print_logo()
 
 
 def load_config() -> dict:
-    config = {}
+    """Returns {"projects": {"name": "expanded_path", ...}}"""
+    config = {"projects": {}}
+    in_projects = False
     with open(CONFIG_FILE) as f:
         for line in f:
-            line = line.strip()
-            if line and not line.startswith("#"):
-                key, _, value = line.partition(":")
-                config[key.strip()] = os.path.expanduser(value.strip())
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if stripped == "projects:":
+                in_projects = True
+                continue
+            if in_projects and line.startswith("  "):
+                key, _, value = stripped.partition(":")
+                config["projects"][key.strip()] = os.path.expanduser(value.strip())
+            else:
+                in_projects = False
     return config
+
+
+def save_config(config: dict) -> None:
+    with open(CONFIG_FILE, "w") as f:
+        f.write("projects:\n")
+        for name, path in config["projects"].items():
+            f.write(f"  {name}: {path}\n")
 
 
 def ask_choice(question: str, options: list) -> int:
@@ -182,27 +202,63 @@ def to_snake_case(name: str) -> str:
     return name.strip("_")
 
 
-def run_bootstrap() -> dict:
-    print("\nWelcome to Fabrikets! No config found — let's set up your project.\n")
-    src = ask("Source directory [src]: ").strip() or "src"
+def run_bootstrap() -> str:
+    """Register a new project interactively. Returns the resolved src path."""
+    print("\nWelcome to Fabrikets! Let's register a new project.\n")
+    name = ask("Project name (e.g. my-app): ").strip()
+    src = ask("Source directory: ").strip()
     domain = to_snake_case(ask("Initial domain group name (e.g. auth, billing, core): ").strip())
-    os.makedirs(os.path.join(src, domain), exist_ok=True)
-    config = {"src": src}
-    with open(CONFIG_FILE, "w") as f:
-        for k, v in config.items():
-            f.write(f"{k}: {v}\n")
-    print(f"\nConfig saved to {CONFIG_FILE}\n")
-    return config
+
+    config = load_config() if os.path.exists(CONFIG_FILE) else {"projects": {}}
+    config["projects"][name] = src
+    save_config(config)
+    print(f"\nProject '{name}' registered → {src}\n")
+
+    src_expanded = os.path.expanduser(src)
+    os.makedirs(os.path.join(src_expanded, domain), exist_ok=True)
+    return src_expanded
 
 
-if not os.path.exists(CONFIG_FILE):
-    config = run_bootstrap()
-else:
+def resolve_project() -> str:
+    """Resolve the src directory for the active project. Exits on error."""
+    if not os.path.exists(CONFIG_FILE):
+        if project_name:
+            print(f"Error: no config found. Run ralph with no arguments to register a project.", file=sys.stderr)
+            sys.exit(1)
+        return run_bootstrap()
+
     config = load_config()
+    projects = config["projects"]
 
-os.makedirs(config["src"], exist_ok=True)
+    if project_name:
+        if project_name not in projects:
+            print(f"Error: project '{project_name}' not found.", file=sys.stderr)
+            print("Run ralph with no arguments to register a new project.", file=sys.stderr)
+            if projects:
+                print("\nAvailable projects:", file=sys.stderr)
+                for n, p in projects.items():
+                    print(f"  {n}  →  {p}", file=sys.stderr)
+            sys.exit(1)
+        return os.path.expanduser(projects[project_name])
 
-TRACKED_FILES = [config["src"]]
+    if not projects:
+        return run_bootstrap()
+
+    if len(projects) == 1:
+        name, path = next(iter(projects.items()))
+        print(f"Project: {name}  ({path})")
+        return os.path.expanduser(path)
+
+    print("Multiple projects registered. Select one with -p:\n", file=sys.stderr)
+    for n, p in projects.items():
+        print(f"  -p {n:<20} {p}", file=sys.stderr)
+    sys.exit(1)
+
+
+src = resolve_project()
+os.makedirs(src, exist_ok=True)
+
+TRACKED_FILES = [src]
 
 if not os.path.exists(prompt_file):
     print(f"Error: {prompt_file} not found", file=sys.stderr)
@@ -236,7 +292,7 @@ def format_tool_input(name: str, inp: dict) -> str:
 
 
 def run_claude(prompt: str, debug: bool = False) -> list:
-    src_abs = os.path.abspath(config["src"])
+    src_abs = os.path.abspath(src)
     context = f"<!-- fabrikets_src: {src_abs} -->\n<!-- Your working directory is the project src directory. All file paths are relative to here. -->\n\n"
     proc = subprocess.Popen(
         ["claude", "--dangerously-skip-permissions", "--output-format", "stream-json", "--print", "--verbose"],
@@ -343,7 +399,6 @@ def show_file_diff(before: str, after: str) -> None:
 
 # Spec mode: interactive interview with Claude to create/add a spec
 if mode == "spec":
-    src = config["src"]
     specs_dir = os.path.join(src, "specs")
 
     mode_choice = ask_choice(

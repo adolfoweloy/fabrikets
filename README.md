@@ -16,11 +16,34 @@ cd fabrica
 uv run ralph.py
 ```
 
-On first run, a bootstrap wizard asks for:
-- **Source directory** — path to your project (e.g. `~/src/my-app`)
-- **Initial domain group** — a name for the first domain (e.g. `auth`, `billing`, `core`)
+On first run, a bootstrap wizard registers your first project:
 
-This creates `config.yaml` and you're ready to go.
+```
+Project name (e.g. my-app): open-mcp-dev
+Source directory: ~/src/open-mcp-dev
+Initial domain group name (e.g. auth, billing, core): auth
+```
+
+This creates `config.yaml` with the project registered. To add more projects later, run ralph with no arguments again.
+
+## Working with multiple projects
+
+`config.yaml` is a registry of named projects:
+
+```yaml
+projects:
+  open-mcp-dev: ~/src/open-mcp-dev
+  my-api: ~/src/my-api
+```
+
+Use `-p` to select which project to work on:
+
+```bash
+uv run ralph.py -p open-mcp-dev spec
+uv run ralph.py -p my-api build
+```
+
+If only one project is registered, `-p` is optional — ralph uses it automatically. If multiple are registered and `-p` is omitted, ralph lists the available projects and exits.
 
 ## Workflow
 
@@ -29,11 +52,11 @@ The typical flow is: **spec → plan → build**.
 ### 1. `spec` — define what to build
 
 ```bash
-uv run ralph.py
-uv run ralph.py spec
+uv run ralph.py -p my-app
+uv run ralph.py -p my-app spec
 ```
 
-Claude interviews you to define a new feature spec. It reads your existing project context, asks structured questions covering functional and non-functional requirements, triggers an architect subagent for review, then writes the spec files to disk.
+Claude interviews you to define a new feature spec. It reads your existing project context, asks structured questions covering functional and non-functional requirements, triggers an architect subagent for review, then writes the spec files to disk and commits them.
 
 Each interview creates a directory under `<src>/specs/<domain>/<feature>/`:
 
@@ -62,17 +85,17 @@ The architect's findings are fed back into the interview so Claude can address t
 ### 2. `plan` — break it into tasks
 
 ```bash
-uv run ralph.py plan
-uv run ralph.py plan --max-iterations 5
+uv run ralph.py -p my-app plan
+uv run ralph.py -p my-app plan --max-iterations 5
 ```
 
-Reads `specs/architecture.md` and all spec files, then creates `specs/<domain>/<feature>/implementation_plan.md` for each spec. Tasks carry a `refs` field listing which spec files are relevant, so build mode can load only what each task needs.
+Reads `specs/architecture.md` and all spec files, then creates `specs/<domain>/<feature>/implementation_plan.md` for each spec. Also updates `design.md` with any implementation decisions made during planning. Commits after each spec is planned.
 
 ### 3. `build` — implement
 
 ```bash
-uv run ralph.py build
-uv run ralph.py build --max-iterations 10
+uv run ralph.py -p my-app build
+uv run ralph.py -p my-app build --max-iterations 10
 ```
 
 Scans all `specs/<domain>/<feature>/implementation_plan.md` files and implements one task per run — writing code, running validation, committing.
@@ -81,8 +104,9 @@ Scans all `specs/<domain>/<feature>/implementation_plan.md` files and implements
 
 | Flag | Default | Description |
 |------|---------|-------------|
+| `-p`, `--project` | — | Project name to work on (as registered in `config.yaml`) |
 | `--max-iterations N` | `1` | How many specs/tasks to process per run |
-| `-d`, `--debug` | off | Show tool calls from Claude in the terminal |
+| `-d`, `--debug` | off | Show full tool call details from Claude in the terminal |
 
 ## Project layout
 
@@ -92,9 +116,9 @@ prompt_spec.md        # instructions for Claude in spec mode
 prompt_architect.md   # instructions for the architect subagent
 prompt_plan.md        # instructions for Claude in plan mode
 prompt_build.md       # instructions for Claude in build mode
-config.yaml           # project configuration (src directory)
+config.yaml           # named project registry
 
-<src>/                # your project (configured via bootstrap)
+<src>/                # your project source directory
   specs/
     architecture.md
     specs.yaml
