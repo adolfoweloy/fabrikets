@@ -27,6 +27,8 @@ To determine incomplete coverage:
 
 If ALL specs are fully covered (every requirement has a task), output `[STOP]`.
 
+When in doubt about whether a requirement is already covered by an existing task, assume it is — prefer `[STOP]` over adding potentially redundant tasks.
+
 Print: `[SPEC] <domain>/<feature>`
 
 ## Step 3: Study the Spec
