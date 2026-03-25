@@ -104,11 +104,25 @@ uv run ralph.py -p my-app build --max-iterations 10
 
 Scans all `specs/<domain>/<feature>/implementation_plan.md` files and implements one task per run — writing code, running validation, committing.
 
+### 4. `bug` — document a bug
+
+```bash
+uv run ralph.py -p my-app bug
+uv run ralph.py -p my-app bug -m "clicking Save on empty form crashes the app"
+```
+
+Opens `$EDITOR` (or `nano` as fallback) for you to describe the bug — paste errors, stack traces, reproduction steps, whatever you have. Claude then interviews you with clarification questions until it has enough context, then creates a bug spec under `specs/bugs/<slug>/` with `overview.md` and `requirements.md`. The bug is registered in `specs/specs.yaml` with `domain: bugs`.
+
+Use `-m` to skip the editor and provide a short description inline.
+
+After documenting, run `plan` (creates `design.md` with root cause analysis + `implementation_plan.md`) and then `build` to fix it.
+
 ## Options
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-p`, `--project` | — | Project name to work on (as registered in `config.yaml`) |
+| `-m`, `--message TEXT` | — | Inline bug description (used with `bug` to skip editor) |
 | `--max-iterations N` | `1` | How many specs/tasks to process per run |
 | `-d`, `--debug` | off | Show full tool call details from Claude in the terminal |
 

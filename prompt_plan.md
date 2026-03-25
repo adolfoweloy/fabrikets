@@ -36,10 +36,10 @@ Print: `[SPEC] <domain>/<feature>`
 For the chosen spec, derive the directory path from its `domain` and `feature` fields in specs.yaml:
 `specs/<domain>/<feature>/`
 
-Read all three files:
+Read the spec files that exist:
 - `specs/<domain>/<feature>/overview.md` — start here for purpose and key decisions
 - `specs/<domain>/<feature>/requirements.md` — full functional and non-functional requirements
-- `specs/<domain>/<feature>/design.md` — data model, interfaces, component design
+- `specs/<domain>/<feature>/design.md` — data model, interfaces, component design (may not exist yet for bug specs — you will create it in Step 6)
 
 If the spec references other specs, read their `overview.md` for context.
 
@@ -123,7 +123,7 @@ Since the plan file lives next to the spec files, you can use relative paths in 
 | blocked | Cannot proceed |
 | cancelled | No longer needed |
 
-## Step 6: Update design.md
+## Step 6: Update or Create design.md
 
 Update `specs/<domain>/<feature>/design.md` with any decisions or discoveries made while planning:
 - Implementation approach and component ordering
@@ -131,13 +131,18 @@ Update `specs/<domain>/<feature>/design.md` with any decisions or discoveries ma
 - Design decisions that were implicit in the spec but now made explicit
 - Missing edge cases or error flows discovered while thinking through tasks
 
+For **bug specs** (`domain: bugs`), `design.md` will not exist yet. Create it with:
+- **Root Cause** — what is causing the bug, based on your source code analysis
+- **Proposed Fix** — which files, functions, or logic to change and how
+- **Test Strategy** — how to verify the fix and prevent regression
+
 Also update other spec files if needed:
 - New constraints or edge cases → `requirements.md`
 - Updated summary → `overview.md`
 
 Keep specs concise but complete.
 
-Print: `[UPDATED] <domain>/<feature>` if you modified a spec.
+Print: `[UPDATED] <domain>/<feature>` if you modified or created a spec file.
 
 ## Step 7: Commit
 

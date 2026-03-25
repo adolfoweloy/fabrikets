@@ -129,6 +129,7 @@ mode = "spec"
 max_iterations = 1
 debug = False
 project_name = None
+message = None
 
 def print_help():
     print("""
@@ -138,10 +139,12 @@ Commands:
   spec        Interview Claude to define a new feature spec (default)
   plan        Generate implementation plans from existing specs
   build       Implement tasks from implementation plans
+  bug         Document a bug as a spec (opens $EDITOR, or use -m for inline)
   bootstrap   Register a new project in config.yaml
 
 Options:
   -p, --project NAME      Project to work on (as registered in config.yaml)
+  -m, --message TEXT      Inline message (used with 'bug' to skip editor)
   --max-iterations N      Max number of specs/tasks to process per run (default: 1)
   -d, --debug             Show full tool call details from Claude
   -h, --help              Show this help message
@@ -156,20 +159,23 @@ while i < len(args):
     elif args[i] == "--max-iterations":
         i += 1
         max_iterations = int(args[i])
-    elif args[i] in ("spec", "plan", "build", "bootstrap"):
+    elif args[i] in ("spec", "plan", "build", "bug", "bootstrap"):
         mode = args[i]
     elif args[i] in ("-d", "--debug"):
         debug = True
     elif args[i] in ("-p", "--project"):
         i += 1
         project_name = args[i]
+    elif args[i] in ("-m", "--message"):
+        i += 1
+        message = args[i]
     else:
         print(f"Error: unknown argument '{args[i]}'", file=sys.stderr)
         print("Run './ralph.py --help' for usage.", file=sys.stderr)
         sys.exit(1)
     i += 1
 
-prompt_files = {"spec": "prompt_spec.md", "plan": "prompt_plan.md", "build": "prompt_build.md"}
+prompt_files = {"spec": "prompt_spec.md", "plan": "prompt_plan.md", "build": "prompt_build.md", "bug": "prompt_bug.md"}
 prompt_file = prompt_files.get(mode)
 
 os.makedirs(".ralph", exist_ok=True)
@@ -420,6 +426,83 @@ def show_file_diff(before: str, after: str) -> None:
     else:
         print("No files modified")
 
+
+# Bug mode: interview to document a bug as a spec
+if mode == "bug":
+    import tempfile
+
+    if message:
+        bug_description = message.strip()
+    else:
+        editor = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "nano"
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", prefix="ralph_bug_", delete=False) as tmp:
+            tmp.write("# Describe the bug below (lines starting with # are ignored)\n\n")
+            tmp_path = tmp.name
+        try:
+            subprocess.run([editor, tmp_path], check=True)
+        except (FileNotFoundError, subprocess.CalledProcessError) as e:
+            if isinstance(e, FileNotFoundError):
+                print(f"Error: editor '{editor}' not found. Set $EDITOR or use -m.", file=sys.stderr)
+            os.unlink(tmp_path)
+            sys.exit(1)
+        with open(tmp_path) as f:
+            lines = [l for l in f.readlines() if not l.startswith("#")]
+        os.unlink(tmp_path)
+        bug_description = "".join(lines).strip()
+
+    if not bug_description:
+        print("Aborted: empty bug description.")
+        sys.exit(0)
+
+    # Write interview file with bug report + prompt
+    bugs_dir = os.path.join(src, "specs", "bugs")
+    os.makedirs(bugs_dir, exist_ok=True)
+    interview_file = os.path.join(bugs_dir, "_active_interview.md")
+
+    with open(interview_file, "w") as f:
+        f.write("<!-- mode: bug -->\n\n")
+        f.write(f"## Bug Report\n\n{bug_description}\n\n---\n\n")
+        f.write(prompt)
+
+    print(f"Bug report captured. Starting interview...\n")
+
+    try:
+        while True:
+            print(f"\n{CLAUDE_HEADER}\n")
+            objects = run_claude(open(interview_file).read(), debug=debug)
+            append_cost(objects)
+            response = extract_text(objects)
+            print()
+
+            usage = extract_usage(objects)
+            input_tokens = usage.get("input_tokens", 0)
+            pct = input_tokens / CONTEXT_WINDOW * 100
+            if pct >= 80:
+                color = RED
+            elif pct >= 60:
+                color = YELLOW
+            else:
+                color = ""
+            print(f"{color}Context: {input_tokens:,} / {CONTEXT_WINDOW:,} tokens ({pct:.1f}%){RESET}\n")
+
+            if "[DONE]" in response:
+                print("Bug documented.")
+                break
+
+            user_input = ask("You: ").strip()
+            if user_input.lower() in ("exit", "quit"):
+                break
+
+            with open(interview_file, "a") as f:
+                f.write(f"\n\nAssistant: {response}\n\nUser: {user_input}")
+    except KeyboardInterrupt:
+        print("\n\nSee ya!")
+
+    # Clean up the active interview file
+    if os.path.exists(interview_file):
+        os.unlink(interview_file)
+
+    sys.exit(0)
 
 # Spec mode: interactive interview with Claude to create/add a spec
 if mode == "spec":
