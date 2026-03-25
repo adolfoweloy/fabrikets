@@ -105,7 +105,7 @@ CONFIG_FILE = "config.yaml"
 
 # Parse arguments
 mode = "spec"
-max_iterations = 1
+max_iterations = 5
 debug = False
 project_name = None
 message = None
@@ -126,7 +126,7 @@ Options:
   -p, --project NAME      Project to work on (as registered in config.yaml)
   -m, --message TEXT      Inline bug description (used with 'bug' to skip editor)
   --bugs                  Only process bug specs (used with 'build' or 'plan')
-  --max-iterations N      Max number of specs/tasks to process per run (default: 1)
+  --max-iterations N      Max number of specs/tasks to process per run (default: 5)
   -d, --debug             Show full tool call details from Claude
   -h, --help              Show this help message
 """)
