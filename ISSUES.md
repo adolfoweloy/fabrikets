@@ -8,7 +8,8 @@
 4. During the build phase, show progress as "step X of N" so the user knows where they are relative to --max-iterations.
 5. Specs should have a priority field (low/medium/high). During the interview phase, the LLM should collect this via a selectable input tool (e.g. AskUserQuestion with predefined options), so the user can pick from low, medium, or high.
 6. config.yaml should probably be stored in a ~/.ralph directory.
-7. Code-reviewer subagent during build phase: after committing a task, ralph calls a reviewer subagent for a thorough code review. The review output creates a temporary `review.md` file alongside `implementation_plan.md` with high-priority fix tasks. On the next iteration, if `review.md` exists, the LLM works on review tasks first before picking up the next backlog task. After applying review suggestions, it tests, commits, removes `review.md`, and continues to the next task.
+7. Task dependency tracking in implementation plans: add a `depends_on` field so plan mode can express which tasks must complete before others. This enables parallel build execution in the future — tasks with no unfinished dependencies can run concurrently. Currently priority covers most ordering needs, but explicit dependencies would be needed for spawning multiple Claude processes in parallel.
+8. Code-reviewer subagent during build phase: after committing a task, ralph calls a reviewer subagent for a thorough code review. The review output creates a temporary `review.md` file alongside `implementation_plan.md` with high-priority fix tasks. On the next iteration, if `review.md` exists, the LLM works on review tasks first before picking up the next backlog task. After applying review suggestions, it tests, commits, removes `review.md`, and continues to the next task.
 
 ## Done
 
