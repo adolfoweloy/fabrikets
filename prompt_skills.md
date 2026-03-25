@@ -20,7 +20,17 @@ Read the project thoroughly to understand its tooling:
 
 ## Step 2: Create Skills
 
-Create `.claude/commands/` directory if it doesn't exist, then write skill files.
+The `.claude/commands/` directory already exists. Write skill files into it.
+
+**IMPORTANT**: Use the Bash tool to write files under `.claude/commands/` (the Write tool
+may not have permission for this directory). Example:
+
+```bash
+cat > .claude/commands/test.md << 'SKILL'
+Run the project test suite.
+...
+SKILL
+```
 
 Each skill is a markdown file at `.claude/commands/<name>.md` containing instructions
 that Claude will follow when the user invokes `/<name>`.

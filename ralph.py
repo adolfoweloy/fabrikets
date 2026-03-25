@@ -420,6 +420,7 @@ def show_file_diff(before: str, after: str) -> None:
 
 # Skills mode: discover project tooling and create Claude Code skills
 if mode == "skills":
+    os.makedirs(os.path.join(src, ".claude", "commands"), exist_ok=True)
     print("Discovering project tooling and creating skills...\n")
     print(f"\n{CLAUDE_HEADER}\n")
     objects = run_claude(prompt, debug=debug)

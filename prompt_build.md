@@ -96,15 +96,19 @@ If you discovered something useful for future development:
 ### Create or update Claude Code skills
 
 If you discovered a repeatable project workflow (how to test, lint, build, run, etc.)
-and `.claude/commands/<name>.md` does not already exist for it, create one:
+and `.claude/commands/<name>.md` does not already exist for it, create one.
 
-```
-.claude/commands/test.md   — how to run the test suite
-.claude/commands/lint.md   — how to run linters/formatters
-.claude/commands/build.md  — how to build the project
+Use the Bash tool to write skill files (the Write tool may lack permission for `.claude/`):
+```bash
+mkdir -p .claude/commands
+cat > .claude/commands/test.md << 'SKILL'
+Run the project test suite.
+<exact commands>
+SKILL
 ```
 
-Each skill file should contain the exact commands and any relevant context.
+Common skills: `test.md`, `lint.md`, `build.md`, `dev.md`.
+Each should contain the exact commands and any relevant context.
 Only create a skill if you are confident about the command — do not guess.
 
 ### Update AGENTS.md
