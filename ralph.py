@@ -285,6 +285,10 @@ prompt = open(prompt_file).read()
 if bugs_only:
     prompt = "**IMPORTANT: Only process specs where `domain: bugs`. Skip all other specs.**\n\n" + prompt
 
+# Model selection per mode
+MODE_MODELS = {"plan": "claude-opus-4-5-20250115"}
+claude_model = MODE_MODELS.get(mode)
+
 
 def get_files_hash() -> str:
     try:
@@ -309,11 +313,14 @@ def format_tool_input(name: str, inp: dict) -> str:
     return str(inp)[:80]
 
 
-def run_claude(prompt: str, debug: bool = False) -> list:
+def run_claude(prompt: str, debug: bool = False, model: str = None) -> list:
     src_abs = os.path.abspath(src)
     context = f"<!-- fabrikets_src: {src_abs} -->\n<!-- Your working directory is the project src directory. All file paths are relative to here. -->\n\n"
+    cmd = ["claude", "--dangerously-skip-permissions", "--output-format", "stream-json", "--print", "--verbose"]
+    if model:
+        cmd += ["--model", model]
     proc = subprocess.Popen(
-        ["claude", "--dangerously-skip-permissions", "--output-format", "stream-json", "--print", "--verbose"],
+        cmd,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -423,7 +430,7 @@ if mode == "skills":
     os.makedirs(os.path.join(src, ".claude", "commands"), exist_ok=True)
     print("Discovering project tooling and creating skills...\n")
     print(f"\n{CLAUDE_HEADER}\n")
-    objects = run_claude(prompt, debug=debug)
+    objects = run_claude(prompt, debug=debug, model=claude_model)
     append_cost(objects)
     response = extract_text(objects)
     print()
@@ -483,7 +490,7 @@ if mode == "bug":
     try:
         while True:
             print(f"\n{CLAUDE_HEADER}\n")
-            objects = run_claude(open(interview_file).read(), debug=debug)
+            objects = run_claude(open(interview_file).read(), debug=debug, model=claude_model)
             append_cost(objects)
             response = extract_text(objects)
             print()
@@ -595,7 +602,7 @@ if mode == "spec":
     try:
         while True:
             print(f"\n{CLAUDE_HEADER}\n")
-            objects = run_claude(open(interview_file).read(), debug=debug)
+            objects = run_claude(open(interview_file).read(), debug=debug, model=claude_model)
             append_cost(objects)
             response = extract_text(objects)
             print()
@@ -620,7 +627,7 @@ if mode == "spec":
                 architect_prompt = open("prompt_architect.md").read()
                 architect_context = open(interview_file).read()
                 architect_input = f"{architect_prompt}\n\n---\n\n## Interview so far\n\n{architect_context}"
-                arch_objects = run_claude(architect_input, debug=debug)
+                arch_objects = run_claude(architect_input, debug=debug, model=claude_model)
                 append_cost(arch_objects)
                 arch_findings = extract_text(arch_objects)
                 print()
@@ -649,7 +656,7 @@ try:
 
         print("Sending prompt to Claude...")
         print("\n--- Claude's response ---")
-        objects = run_claude(prompt, debug=debug)
+        objects = run_claude(prompt, debug=debug, model=claude_model)
         elapsed = (datetime.now() - iter_start).seconds
         print(f"\n--- End response --- ({elapsed // 60}m {elapsed % 60}s)\n")
 
