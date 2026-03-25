@@ -130,6 +130,7 @@ max_iterations = 1
 debug = False
 project_name = None
 message = None
+bugs_only = False
 
 def print_help():
     print("""
@@ -144,7 +145,8 @@ Commands:
 
 Options:
   -p, --project NAME      Project to work on (as registered in config.yaml)
-  -m, --message TEXT      Inline message (used with 'bug' to skip editor)
+  -m, --message TEXT      Inline bug description (used with 'bug' to skip editor)
+  --bugs                  Only process bug specs (used with 'build' or 'plan')
   --max-iterations N      Max number of specs/tasks to process per run (default: 1)
   -d, --debug             Show full tool call details from Claude
   -h, --help              Show this help message
@@ -169,6 +171,8 @@ while i < len(args):
     elif args[i] in ("-m", "--message"):
         i += 1
         message = args[i]
+    elif args[i] == "--bugs":
+        bugs_only = True
     else:
         print(f"Error: unknown argument '{args[i]}'", file=sys.stderr)
         print("Run './ralph.py --help' for usage.", file=sys.stderr)
@@ -297,6 +301,9 @@ if not prompt_file or not os.path.exists(prompt_file):
 print(f"Running in {mode} mode using {prompt_file}")
 prompt = open(prompt_file).read()
 
+if bugs_only:
+    prompt = "**IMPORTANT: Only process specs where `domain: bugs`. Skip all other specs.**\n\n" + prompt
+
 
 def get_files_hash() -> str:
     try:
@@ -350,6 +357,7 @@ def run_claude(prompt: str, debug: bool = False) -> list:
         objects.append(obj)
 
         obj_type = obj.get("type")
+        printed_text = False
         if obj_type == "assistant":
             for block in obj.get("message", {}).get("content", []):
                 if block.get("type") == "text":
@@ -357,6 +365,7 @@ def run_claude(prompt: str, debug: bool = False) -> list:
                     if text:
                         spinner.stop()
                         print(render_markdown(text), end="", flush=True)
+                        printed_text = True
                 elif block.get("type") == "tool_use":
                     spinner.stop()
                     name = block.get("name", "")
@@ -375,7 +384,8 @@ def run_claude(prompt: str, debug: bool = False) -> list:
                         content = " ".join(b.get("text", "") for b in content)
                     print(f"{RED}  ERROR: {str(content)[:150]}{RESET}")
 
-        spinner.start()
+        if not printed_text:
+            spinner.start()
 
     spinner.stop()
     proc.wait()

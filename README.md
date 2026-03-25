@@ -123,6 +123,7 @@ After documenting, run `plan` (creates `design.md` with root cause analysis + `i
 |------|---------|-------------|
 | `-p`, `--project` | — | Project name to work on (as registered in `config.yaml`) |
 | `-m`, `--message TEXT` | — | Inline bug description (used with `bug` to skip editor) |
+| `--bugs` | off | Only process bug specs (used with `build` or `plan`) |
 | `--max-iterations N` | `1` | How many specs/tasks to process per run |
 | `-d`, `--debug` | off | Show full tool call details from Claude in the terminal |
 
