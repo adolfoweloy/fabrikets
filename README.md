@@ -133,7 +133,15 @@ uv run ralph.py -p my-app skills
 
 Analyses the project's build config, CI, test setup, and linter config, then creates Claude Code skills (`.claude/commands/`) in the target project. These become available as slash commands (`/test`, `/lint`, `/build`, etc.) when working on the project with Claude Code directly.
 
-### 6. `bootstrap` — register a new project
+### 6. `readme` — create or update the project README
+
+```bash
+uv run ralph.py -p my-app readme
+```
+
+Reads the project's source code, specs, build config, and architecture, then creates or updates `README.md` in the target project. If a README already exists, it preserves accurate content and adds or corrects sections.
+
+### 7. `bootstrap` — register a new project
 
 ```bash
 uv run ralph.py bootstrap
@@ -162,6 +170,7 @@ prompt_plan.md        # instructions for Claude in plan mode
 prompt_build.md       # instructions for Claude in build mode
 prompt_bug.md         # instructions for Claude in bug mode
 prompt_skills.md      # instructions for Claude in skills mode
+prompt_readme.md      # instructions for Claude in readme mode
 config.yaml           # named project registry (not git-tracked)
 
 <src>/                # your project source directory

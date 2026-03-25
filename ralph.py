@@ -121,6 +121,7 @@ Commands:
   build       Implement tasks from implementation plans
   bug         Document a bug as a spec (opens $EDITOR, or use -m for inline)
   skills      Discover project tooling and create Claude Code skills
+  readme      Create or update the project README.md
   bootstrap   Register a new project in config.yaml
 
 Options:
@@ -141,7 +142,7 @@ while i < len(args):
     elif args[i] == "--max-iterations":
         i += 1
         max_iterations = int(args[i])
-    elif args[i] in ("spec", "plan", "build", "bug", "skills", "bootstrap"):
+    elif args[i] in ("spec", "plan", "build", "bug", "skills", "readme", "bootstrap"):
         mode = args[i]
     elif args[i] in ("-d", "--debug"):
         debug = True
@@ -159,7 +160,7 @@ while i < len(args):
         sys.exit(1)
     i += 1
 
-prompt_files = {"spec": "prompt_spec.md", "plan": "prompt_plan.md", "build": "prompt_build.md", "bug": "prompt_bug.md", "skills": "prompt_skills.md"}
+prompt_files = {"spec": "prompt_spec.md", "plan": "prompt_plan.md", "build": "prompt_build.md", "bug": "prompt_bug.md", "skills": "prompt_skills.md", "readme": "prompt_readme.md"}
 prompt_file = prompt_files.get(mode)
 
 os.makedirs(".ralph", exist_ok=True)
@@ -436,6 +437,18 @@ if mode == "skills":
     print()
     if "[DONE]" not in response:
         print(f"{YELLOW}WARNING: Skills creation may not have completed successfully.{RESET}")
+    sys.exit(0)
+
+# README mode: create or update the project README
+if mode == "readme":
+    print("Analysing project for README...\n")
+    print(f"\n{CLAUDE_HEADER}\n")
+    objects = run_claude(prompt, debug=debug, model=claude_model)
+    append_cost(objects)
+    response = extract_text(objects)
+    print()
+    if "[DONE]" not in response:
+        print(f"{YELLOW}WARNING: README creation may not have completed successfully.{RESET}")
     sys.exit(0)
 
 # Bug mode: interview to document a bug as a spec
