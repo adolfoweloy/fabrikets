@@ -91,12 +91,26 @@ Print: `[STATUS] <domain>/<feature>: task description -> done` (or `blocked`)
 
 ## Step 8: Record Operational Learnings
 
-If you discovered something useful for future development, append to `AGENTS.md`:
-- Build/tooling commands
-- Common gotchas
-- Directory structure decisions
+If you discovered something useful for future development:
 
-Do NOT record implementation details or business logic.
+### Create or update Claude Code skills
+
+If you discovered a repeatable project workflow (how to test, lint, build, run, etc.)
+and `.claude/commands/<name>.md` does not already exist for it, create one:
+
+```
+.claude/commands/test.md   — how to run the test suite
+.claude/commands/lint.md   — how to run linters/formatters
+.claude/commands/build.md  — how to build the project
+```
+
+Each skill file should contain the exact commands and any relevant context.
+Only create a skill if you are confident about the command — do not guess.
+
+### Update AGENTS.md
+
+Append gotchas, directory structure decisions, or other learnings to `AGENTS.md`.
+Do NOT record implementation details, business logic, or anything already covered by a skill.
 
 ## Step 9: Update README
 

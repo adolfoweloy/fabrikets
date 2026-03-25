@@ -117,6 +117,16 @@ Use `-m` to skip the editor and provide a short description inline.
 
 After documenting, run `plan` (creates `design.md` with root cause analysis + `implementation_plan.md`) and then `build` to fix it.
 
+### 5. `skills` — discover project tooling
+
+```bash
+uv run ralph.py -p my-app skills
+```
+
+Analyses the project's build config, CI, test setup, and linter config, then creates Claude Code skills (`.claude/commands/`) in the target project. These become available as slash commands (`/test`, `/lint`, `/build`, etc.) when working on the project with Claude Code.
+
+Build mode also creates skills organically as it discovers workflows during implementation.
+
 ## Options
 
 | Flag | Default | Description |

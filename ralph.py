@@ -120,6 +120,7 @@ Commands:
   plan        Generate implementation plans from existing specs
   build       Implement tasks from implementation plans
   bug         Document a bug as a spec (opens $EDITOR, or use -m for inline)
+  skills      Discover project tooling and create Claude Code skills
   bootstrap   Register a new project in config.yaml
 
 Options:
@@ -140,7 +141,7 @@ while i < len(args):
     elif args[i] == "--max-iterations":
         i += 1
         max_iterations = int(args[i])
-    elif args[i] in ("spec", "plan", "build", "bug", "bootstrap"):
+    elif args[i] in ("spec", "plan", "build", "bug", "skills", "bootstrap"):
         mode = args[i]
     elif args[i] in ("-d", "--debug"):
         debug = True
@@ -158,7 +159,7 @@ while i < len(args):
         sys.exit(1)
     i += 1
 
-prompt_files = {"spec": "prompt_spec.md", "plan": "prompt_plan.md", "build": "prompt_build.md", "bug": "prompt_bug.md"}
+prompt_files = {"spec": "prompt_spec.md", "plan": "prompt_plan.md", "build": "prompt_build.md", "bug": "prompt_bug.md", "skills": "prompt_skills.md"}
 prompt_file = prompt_files.get(mode)
 
 os.makedirs(".ralph", exist_ok=True)
@@ -416,6 +417,18 @@ def show_file_diff(before: str, after: str) -> None:
     else:
         print("No files modified")
 
+
+# Skills mode: discover project tooling and create Claude Code skills
+if mode == "skills":
+    print("Discovering project tooling and creating skills...\n")
+    print(f"\n{CLAUDE_HEADER}\n")
+    objects = run_claude(prompt, debug=debug)
+    append_cost(objects)
+    response = extract_text(objects)
+    print()
+    if "[DONE]" not in response:
+        print(f"{YELLOW}WARNING: Skills creation may not have completed successfully.{RESET}")
+    sys.exit(0)
 
 # Bug mode: interview to document a bug as a spec
 if mode == "bug":
