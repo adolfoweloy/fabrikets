@@ -26,27 +26,6 @@ SPINNER_INTENSITIES = [DIM, "", BOLD, ""]  # dim → normal → bold → normal
 
 def print_logo():
     PALE = "\033[38;5;216m"   # pale orange #ffaf87
-    ORG  = "\033[38;5;208m"   # orange (door accent)
-    WIN  = "\033[38;5;220m"   # amber (windows)
-    SMK  = "\033[38;5;244m"   # gray (smoke)
-
-    # Center 21-wide factory over the ~79-wide text block
-    pad = " " * 29
-
-    factory = [
-        f"    {SMK}░{RESET}     {SMK}░{RESET}     {SMK}░{RESET}    ",
-        f"    {PALE}█{RESET}     {PALE}█{RESET}     {PALE}█{RESET}    ",
-        f"    {PALE}█{RESET}     {PALE}█{RESET}     {PALE}█{RESET}    ",
-        f"{PALE}█████████████████████{RESET}",
-        f"{PALE}█{RESET}   {WIN}▒▒{RESET}    {WIN}▒▒{RESET}    {WIN}▒▒{RESET}  {PALE}█{RESET}",
-        f"{PALE}█{RESET}   {WIN}▒▒{RESET}    {WIN}▒▒{RESET}    {WIN}▒▒{RESET}  {PALE}█{RESET}",
-        f"{PALE}█                   █{RESET}",
-        f"{PALE}█{RESET}      {ORG}████████{RESET}     {PALE}█{RESET}",
-        f"{PALE}█████████████████████{RESET}",
-    ]
-    for line in factory:
-        print(pad + line)
-    print()
 
     # ANSI Shadow font (Spring Boot style) for FABRIKETS
     FONT = {
@@ -183,6 +162,7 @@ prompt_files = {"spec": "prompt_spec.md", "plan": "prompt_plan.md", "build": "pr
 prompt_file = prompt_files.get(mode)
 
 os.makedirs(".ralph", exist_ok=True)
+print("\033[2J\033[H", end="", flush=True)  # clear screen, cursor to top
 print_logo()
 
 
