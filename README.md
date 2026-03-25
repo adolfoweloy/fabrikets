@@ -1,6 +1,6 @@
 # fabrikets
 
-An AI-driven development loop. Define specs, plan tasks, build — each stage driven by Claude.
+An AI-driven development loop. Define specs, report bugs, plan tasks, build — each stage driven by Claude.
 
 ## Prerequisites
 
@@ -12,7 +12,7 @@ An AI-driven development loop. Define specs, plan tasks, build — each stage dr
 
 ```bash
 git clone <this repo>
-cd fabrica
+cd fabrikets
 uv run ralph.py
 ```
 
@@ -47,16 +47,17 @@ uv run ralph.py -p open-mcp-dev spec
 uv run ralph.py -p my-api build
 ```
 
-If only one project is registered, `-p` is optional — ralph uses it automatically. If multiple are registered and `-p` is omitted, ralph lists the available projects and exits.
+If only one project is registered, `-p` is optional — fabrikets uses it automatically. If multiple are registered and `-p` is omitted, fabrikets lists the available projects and exits.
 
 ## Workflow
 
 The typical flow is: **spec → plan → build**.
 
+For bugs: **bug → plan → build**.
+
 ### 1. `spec` — define what to build
 
 ```bash
-uv run ralph.py -p my-app
 uv run ralph.py -p my-app spec
 ```
 
@@ -90,19 +91,19 @@ The architect's findings are fed back into the interview so Claude can address t
 
 ```bash
 uv run ralph.py -p my-app plan
-uv run ralph.py -p my-app plan --max-iterations 5
 ```
 
-Reads `specs/architecture.md` and all spec files, then creates `specs/<domain>/<feature>/implementation_plan.md` for each spec. Also updates `design.md` with any implementation decisions made during planning. Commits after each spec is planned.
+Reads `specs/architecture.md` and all spec files, then creates `specs/<domain>/<feature>/implementation_plan.md` for each spec. Each task gets a priority (`high`, `medium`, `low`) based on how critical it is — core/foundational work is high, features building on the core are medium, polish and edge cases are low. Also updates `design.md` with any implementation decisions made during planning. Commits after each spec is planned.
+
+Plan mode uses Opus for deeper analysis.
 
 ### 3. `build` — implement
 
 ```bash
 uv run ralph.py -p my-app build
-uv run ralph.py -p my-app build --max-iterations 10
 ```
 
-Scans all `specs/<domain>/<feature>/implementation_plan.md` files and implements one task per run — writing code, running validation, committing.
+Scans all `implementation_plan.md` files and implements one task per iteration — picking the highest priority `todo` task first. Each iteration: loads context, writes code, validates (lint, typecheck, tests), updates the plan status, and commits. Build mode also creates Claude Code skills organically as it discovers project workflows (how to test, lint, build).
 
 ### 4. `bug` — document a bug
 
@@ -113,9 +114,16 @@ uv run ralph.py -p my-app bug -m "clicking Save on empty form crashes the app"
 
 Opens `$EDITOR` (or `nano` as fallback) for you to describe the bug — paste errors, stack traces, reproduction steps, whatever you have. Claude then interviews you with clarification questions until it has enough context, then creates a bug spec under `specs/bugs/<slug>/` with `overview.md` and `requirements.md`. The bug is registered in `specs/specs.yaml` with `domain: bugs`.
 
+Before the interview starts, fabrikets asks whether Claude may run commands (tests, linter, the app) to investigate the bug. If allowed, Claude can actively reproduce and diagnose the issue.
+
 Use `-m` to skip the editor and provide a short description inline.
 
-After documenting, run `plan` (creates `design.md` with root cause analysis + `implementation_plan.md`) and then `build` to fix it.
+After documenting, run `plan` (creates `design.md` with root cause analysis + `implementation_plan.md`) and then `build` to fix it. Use `--bugs` to prioritise bug specs over features:
+
+```bash
+uv run ralph.py -p my-app plan --bugs
+uv run ralph.py -p my-app build --bugs
+```
 
 ### 5. `skills` — discover project tooling
 
@@ -123,9 +131,15 @@ After documenting, run `plan` (creates `design.md` with root cause analysis + `i
 uv run ralph.py -p my-app skills
 ```
 
-Analyses the project's build config, CI, test setup, and linter config, then creates Claude Code skills (`.claude/commands/`) in the target project. These become available as slash commands (`/test`, `/lint`, `/build`, etc.) when working on the project with Claude Code.
+Analyses the project's build config, CI, test setup, and linter config, then creates Claude Code skills (`.claude/commands/`) in the target project. These become available as slash commands (`/test`, `/lint`, `/build`, etc.) when working on the project with Claude Code directly.
 
-Build mode also creates skills organically as it discovers workflows during implementation.
+### 6. `bootstrap` — register a new project
+
+```bash
+uv run ralph.py bootstrap
+```
+
+Interactively registers a new project in `config.yaml`. Asks for project name, source directory, and initial domain group.
 
 ## Options
 
@@ -136,6 +150,7 @@ Build mode also creates skills organically as it discovers workflows during impl
 | `--bugs` | off | Only process bug specs (used with `build` or `plan`) |
 | `--max-iterations N` | `5` | How many specs/tasks to process per run |
 | `-d`, `--debug` | off | Show full tool call details from Claude in the terminal |
+| `-h`, `--help` | — | Show help message |
 
 ## Project layout
 
@@ -145,7 +160,9 @@ prompt_spec.md        # instructions for Claude in spec mode
 prompt_architect.md   # instructions for the architect subagent
 prompt_plan.md        # instructions for Claude in plan mode
 prompt_build.md       # instructions for Claude in build mode
-config.yaml           # named project registry
+prompt_bug.md         # instructions for Claude in bug mode
+prompt_skills.md      # instructions for Claude in skills mode
+config.yaml           # named project registry (not git-tracked)
 
 <src>/                # your project source directory
   specs/
@@ -157,6 +174,9 @@ config.yaml           # named project registry
       requirements.md
       design.md
       implementation_plan.md
+    bugs/<slug>/
+      overview.md
+      requirements.md
 
 .ralph/
   cost.md             # token usage and cost log per run
