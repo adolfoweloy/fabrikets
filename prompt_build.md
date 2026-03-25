@@ -29,7 +29,9 @@ Read `specs/specs.yaml` to get all specs. For each spec (in order), check if
 - If a spec has no `implementation_plan.md`, **skip it** — creating plans is not your job (that is plan mode's job).
 - **If no todo task exists across all specs**, output `[STOP]` and stop here. There is nothing left to do.
 
-Otherwise, pick the first todo task found. Read the README and key source files to understand the project's current state.
+Otherwise, pick the **highest priority** todo task across all specs. Priority order: `high` > `medium` > `low`. If multiple tasks share the same priority, pick the first one found. Tasks without a priority field are treated as `medium`.
+
+Read the README and key source files to understand the project's current state.
 
 Print: `[TASK] <domain>/<feature>: task description`
 

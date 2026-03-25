@@ -60,8 +60,22 @@ status: <overall status>
 tasks:
   - task: <comprehensive description>
     refs: [<spec file(s) relevant to this task>]
+    priority: <high|medium|low>
     status: <status>
 ```
+
+### Priority
+
+Assign a priority to each task based on how critical it is to the solution:
+
+| Priority | When to use |
+|----------|-------------|
+| high | Core functionality that other tasks depend on — data models, key interfaces, foundational logic. Without these, nothing else works. |
+| medium | Important features that build on the core — API endpoints, business rules, integrations. |
+| low | Nice-to-haves, polish, edge case handling, non-critical validation, documentation. |
+
+Order tasks within the plan by priority (high first, then medium, then low).
+Test tasks inherit the priority of the implementation task they correspond to.
 
 ### Task Descriptions
 
@@ -86,11 +100,13 @@ Example:
 - task: >
     Create User model with fields: id (UUID), email (string, unique, RFC 5321), ...
   refs: [specs/auth/user_login/design.md]
+  priority: high
   status: todo
 - task: >
     Test User model: valid creation, duplicate email rejection, invalid email format,
     missing required fields, id uniqueness across multiple creations
   refs: [specs/auth/user_login/requirements.md]
+  priority: high
   status: todo
 ```
 
@@ -109,6 +125,7 @@ tasks:
     refs:
       - specs/auth/user_login/design.md
       - specs/architecture.md
+    priority: high
     status: todo
 ```
 
