@@ -17,6 +17,9 @@ Read the bug report above (under "Bug Report"). Then:
 - Read `specs/architecture.md` if it exists — understand the architecture
 - List existing directories under `specs/bugs/` to know which slugs are already taken
 - Browse source code in the area most likely related to the bug
+- If the header contains `<!-- permissions: run_commands -->`, you MAY run shell commands
+  (tests, linter, the application itself) to reproduce and investigate the bug.
+  If that comment is absent, do NOT run any commands — only read files and ask questions.
 
 ## Step 2: Interview the User
 

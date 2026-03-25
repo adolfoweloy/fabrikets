@@ -444,6 +444,14 @@ if mode == "bug":
         print("Aborted: empty bug description.")
         sys.exit(0)
 
+    # Ask if Claude can run commands to investigate
+    run_choice = ask_choice(
+        "Allow Claude to run commands (tests, linter, etc.) to investigate the bug?",
+        ["Yes — let Claude run commands to reproduce and understand the bug",
+         "No — read-only, Claude should only read code and ask questions"],
+    )
+    can_run_commands = run_choice == 0
+
     # Write interview file with bug report + prompt
     bugs_dir = os.path.join(src, "specs", "bugs")
     os.makedirs(bugs_dir, exist_ok=True)
@@ -451,6 +459,8 @@ if mode == "bug":
 
     with open(interview_file, "w") as f:
         f.write("<!-- mode: bug -->\n\n")
+        if can_run_commands:
+            f.write("<!-- permissions: run_commands -->\n\n")
         f.write(f"## Bug Report\n\n{bug_description}\n\n---\n\n")
         f.write(prompt)
 
