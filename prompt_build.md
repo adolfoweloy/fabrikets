@@ -72,7 +72,15 @@ After all validations, print:
 
 If validation fails, fix the issue and re-validate. If you cannot fix it, mark task as blocked.
 
-## Step 6: Commit
+## Step 6: Update Plan
+
+Use the Edit tool to update `specs/<domain>/<feature>/implementation_plan.md`:
+- Set the task's status to `done` (or `blocked` if it failed)
+- If all tasks are done, set the top-level `status` to `done`
+
+Print: `[STATUS] <domain>/<feature>: task description -> done` (or `blocked`)
+
+## Step 7: Commit
 
 If validations pass, use Bash to commit here:
 ```bash
@@ -80,14 +88,6 @@ cd <src> && git add -A && git commit -m "<spec-id>: <task description>"
 ```
 
 Example: `a3f2b1: implement user login and session creation`
-
-## Step 7: Update Plan
-
-Use the Edit tool to update `specs/<domain>/<feature>/implementation_plan.md`:
-- Set the task's status to `done` (or `blocked` if it failed)
-- If all tasks are done, set the top-level `status` to `done`
-
-Print: `[STATUS] <domain>/<feature>: task description -> done` (or `blocked`)
 
 ## Step 8: Record Operational Learnings
 
