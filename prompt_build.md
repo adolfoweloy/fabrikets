@@ -19,6 +19,7 @@ You MUST print status markers as you work so progress is visible:
 [VALIDATE] test
 [RESULT] pass | fail: reason
 [STATUS] spec-name: task description -> done | blocked | todo
+[CRITERIA] criterion description -> pass | fail: reason
 ```
 
 ## Step 1: Find the Next Task
@@ -45,10 +46,19 @@ Then read any additional files listed in the task's `refs` field that aren't alr
 
 ## Step 3: Check if Already Implemented
 
-Before implementing, check if the task is already implemented in the source code. If so:
+Before implementing, check if the task is **fully** implemented in the source code. This must be a thorough check, not a superficial one:
+
+- Read the actual source files, not just check if they exist
+- Verify that **every specific requirement** in the task description is implemented (fields, types, validation, error handling, etc.)
+- If the task mentions tests, verify the tests exist and cover the described cases
+- A partially implemented task is NOT "already implemented" — proceed to Step 4 to complete it
+
+Only if ALL aspects of the task are genuinely complete:
 1. Mark the task as `done` in `specs/<domain>/<feature>/implementation_plan.md`
 2. Print: `[STATUS] <domain>/<feature>: task description -> done (already implemented)`
 3. Output `[PROGRESS]` and end your response (the outer loop will call you again for the next task)
+
+**When in doubt, implement rather than skip.**
 
 ## Step 4: Implement
 
@@ -78,9 +88,17 @@ If validation fails, fix the issue and re-validate. If you cannot fix it, mark t
 
 Use the Edit tool to update `specs/<domain>/<feature>/implementation_plan.md`:
 - Set the task's status to `done` (or `blocked` if it failed)
-- If all tasks are done, set the top-level `status` to `done`
 
 Print: `[STATUS] <domain>/<feature>: task description -> done` (or `blocked`)
+
+### If this was the last `todo` task: verify acceptance criteria
+
+If all tasks in the plan are now `done` (or `blocked`), read the `acceptance_criteria` from the implementation plan and verify each one against the actual source code:
+
+1. For each criterion, check the code to confirm it is satisfied
+2. Print: `[CRITERIA] <criterion> -> pass` or `[CRITERIA] <criterion> -> fail: reason`
+3. If any criterion fails, create new `todo` tasks in the plan to address the gaps, and output `[PROGRESS]` (not `[STOP]`) so the loop continues
+4. If all criteria pass, set the top-level `status` to `done`
 
 ## Step 7: Commit
 
@@ -152,7 +170,8 @@ You MUST output exactly one of these status markers at the end of your response:
 ## Status Rules
 
 - Output `[PROGRESS]` after completing Steps 3-9 for one task
-- Output `[STOP]` only when Step 1 finds no tasks with `status: todo`
+- Output `[PROGRESS]` if acceptance criteria verification created new tasks
+- Output `[STOP]` only when Step 1 finds no tasks with `status: todo` AND all acceptance criteria pass
 - If you cannot do any work (unclear requirements, need input), output `[STOP]` and explain why
 
 This keeps each invocation focused on a single task.

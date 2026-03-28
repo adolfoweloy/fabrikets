@@ -57,12 +57,29 @@ Write tasks to `specs/<domain>/<feature>/implementation_plan.md` (create if it d
 id: <spec id>
 overview: <what will be implemented>
 status: <overall status>
+acceptance_criteria:
+  - <concrete, verifiable condition that must be true when the feature is complete>
+  - <another condition>
 tasks:
   - task: <comprehensive description>
     refs: [<spec file(s) relevant to this task>]
     priority: <high|medium|low>
     status: <status>
 ```
+
+### Acceptance Criteria
+
+Define 3-7 concrete, verifiable conditions that must all be true for the feature to be considered complete. These are derived from `requirements.md` and `design.md` and describe observable end-state behaviour, not implementation steps.
+
+Good criteria are specific and testable:
+- "GET /api/users returns a paginated list with limit/offset parameters"
+- "Invalid email addresses are rejected with a 422 response and descriptive error message"
+- "OAuth token refresh happens automatically before expiry without user interaction"
+
+Bad criteria are vague or just restate tasks:
+- "User management works correctly"
+- "All tests pass"
+- "Code is clean"
 
 ### Priority
 
@@ -133,10 +150,12 @@ Since the plan file lives next to the spec files, you can use relative paths in 
 
 ### Status Values
 
+**IMPORTANT: Every new task MUST be created with `status: todo`. Never create tasks with `status: done` — that is only set by build mode after implementation. Do not copy the status from existing plans.**
+
 | Status | Meaning |
 |--------|---------|
 | todo | Ready to be worked on |
-| done | Implementation complete |
+| done | Implementation complete (set by build mode only) |
 | blocked | Cannot proceed |
 | cancelled | No longer needed |
 
