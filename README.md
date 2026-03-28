@@ -177,6 +177,14 @@ uv run ralph.py cost -f           # cost per feature across all projects
 
 Reads `.ralph/costs.jsonl` and shows cost, token usage, and call counts grouped by project, mode, or feature.
 
+### 9. `specs` — list project specs
+
+```bash
+uv run ralph.py -p my-app specs
+```
+
+Lists all specs for a project grouped by domain, showing feature name, description, and status.
+
 ## Options
 
 | Flag | Default | Description |

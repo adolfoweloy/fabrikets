@@ -133,6 +133,7 @@ Commands:
   readme      Create or update the project README.md
   bootstrap   Register a new project in config.yaml
   cost        Show cost breakdown (use -f for per-feature, -p for per-project)
+  specs       List all specs for a project
 
 Options:
   -p, --project NAME      Project to work on (as registered in config.yaml)
@@ -152,7 +153,7 @@ while i < len(args):
     elif args[i] == "--max-iterations":
         i += 1
         max_iterations = int(args[i])
-    elif args[i] in ("spec", "plan", "build", "bug", "skills", "readme", "bootstrap", "cost"):
+    elif args[i] in ("spec", "plan", "build", "bug", "skills", "readme", "bootstrap", "cost", "specs"):
         mode = args[i]
     elif args[i] in ("-d", "--debug"):
         debug = True
@@ -394,6 +395,60 @@ src = resolve_project()
 os.makedirs(src, exist_ok=True)
 
 TRACKED_FILES = [src]
+
+# Specs list command
+if mode == "specs":
+    BG_CYAN = "\033[46m"
+    specs_yaml = os.path.join(src, "specs", "specs.yaml")
+    if not os.path.exists(specs_yaml):
+        print("No specs found. Run 'spec' to create one.")
+        sys.exit(0)
+
+    specs = []
+    current = {}
+    with open(specs_yaml) as f:
+        for line in f:
+            stripped = line.strip()
+            if stripped.startswith("- id:"):
+                if current:
+                    specs.append(current)
+                current = {"id": stripped[5:].strip()}
+            elif stripped.startswith("domain:"):
+                current["domain"] = stripped[7:].strip()
+            elif stripped.startswith("feature:"):
+                current["feature"] = stripped[8:].strip()
+            elif stripped.startswith("description:"):
+                current["description"] = stripped[12:].strip()
+            elif stripped.startswith("status:"):
+                current["status"] = stripped[7:].strip()
+        if current:
+            specs.append(current)
+
+    if not specs:
+        print("No specs found.")
+        sys.exit(0)
+
+    # Group by domain
+    domains = {}
+    for s in specs:
+        d = s.get("domain", "unknown")
+        domains.setdefault(d, []).append(s)
+
+    for domain in sorted(domains):
+        print(f"\n  {BOLD}{domain}{RESET}")
+        for s in domains[domain]:
+            name = s.get("feature", s.get("id", "?"))
+            desc = s.get("description", "")
+            status = s.get("status", "?")
+            status_color = {
+                "done": "\033[32m",      # green
+                "todo": YELLOW,
+                "blocked": RED,
+            }.get(status, "")
+            print(f"    {BG_CYAN}{BOLD} {name} {RESET}  {desc}")
+            print(f"      {status_color}{status}{RESET}")
+    print()
+    sys.exit(0)
 
 if not prompt_file or not os.path.exists(prompt_file):
     print(f"Error: prompt file for '{mode}' not found", file=sys.stderr)
