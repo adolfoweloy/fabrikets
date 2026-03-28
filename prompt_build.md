@@ -72,7 +72,7 @@ For each file changed, print: `[CODE] filename - brief description of change`
 ## Step 5: Validate
 
 Use the Bash tool to run each validation command here.
-Check the project's README or package.json / Makefile to discover the actual commands.
+Check the project's README or build config (`package.json`, `pyproject.toml`, `Cargo.toml`, `Makefile`, etc.) to discover the actual commands.
 
 1. `[VALIDATE] lint` - Run the project's lint command, fix issues if any
 2. `[VALIDATE] typecheck` - Run the project's typecheck command if applicable
@@ -98,7 +98,7 @@ If all tasks in the plan are now `done` (or `blocked`), read the `acceptance_cri
 1. For each criterion, check the code to confirm it is satisfied
 2. Print: `[CRITERIA] <criterion> -> pass` or `[CRITERIA] <criterion> -> fail: reason`
 3. If any criterion fails, create new `todo` tasks in the plan to address the gaps, and output `[PROGRESS]` (not `[STOP]`) so the loop continues
-4. If all criteria pass, set the top-level `status` to `done`
+4. If all criteria pass, set the top-level `status` to `done` in `implementation_plan.md` **and** update the spec's `status` to `done` in `specs/specs.yaml`
 
 ## Step 7: Commit
 

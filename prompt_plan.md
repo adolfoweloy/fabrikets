@@ -180,7 +180,11 @@ Keep specs concise but complete.
 
 Print: `[UPDATED] <domain>/<feature>` if you modified or created a spec file.
 
-## Step 7: Commit
+## Step 7: Update specs.yaml
+
+Set the spec's `status` to `wip` in `specs/specs.yaml` (it was `todo` from spec mode).
+
+## Step 8: Commit
 
 Commit your changes so the next iteration can see the updated state:
 
@@ -189,7 +193,7 @@ git add specs/
 git commit -m "plan: <domain>/<feature> - <brief summary>"
 ```
 
-## Step 8: Output Status
+## Step 9: Output Status
 
 You MUST output exactly one of these status markers at the end of your response:
 
@@ -199,7 +203,7 @@ You MUST output exactly one of these status markers at the end of your response:
 
 ## Status Rules
 
-- Output `[PROGRESS]` after completing Steps 3-7 for one spec
+- Output `[PROGRESS]` after completing Steps 3-8 for one spec
 - Output `[STOP]` only when Step 2 finds no specs needing work
 - If you cannot do any work (unclear requirements, need input), output `[STOP]` and explain why
 
