@@ -206,7 +206,7 @@ config.yaml           # project registry + model config (not git-tracked)
       requirements.md
 
 .ralph/
-  cost.md             # token usage and cost log per run
+  costs.jsonl         # per-call cost log (project, mode, spec, tokens, cost)
 ```
 
 ## Claude Code integration

@@ -279,7 +279,9 @@ def resolve_project() -> str:
         return run_bootstrap()
 
     if len(projects) == 1:
+        global project_name
         name, path = next(iter(projects.items()))
+        project_name = name
         print(f"Project: {name}  ({path})")
         return os.path.expanduser(path)
 
@@ -409,15 +411,22 @@ def run_claude(prompt: str, debug: bool = False, model: str = None) -> list:
     return objects
 
 
-def append_cost(objects: list) -> None:
+def append_cost(objects: list, spec: str = None) -> None:
     for obj in objects:
         if obj.get("type") == "result":
-            cost = str(obj.get("total_cost_usd", ""))[:6]
             usage = obj.get("usage", {})
-            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            line = f"cost: ${cost}  in: {total_input_tokens(usage)}  out: {usage.get('output_tokens', 0)}  [{ts}]\n"
-            with open(".ralph/cost.md", "a") as f:
-                f.write(line)
+            entry = {
+                "project": project_name or "unknown",
+                "mode": mode,
+                "spec": spec,
+                "cost_usd": obj.get("total_cost_usd", 0),
+                "input_tokens": total_input_tokens(usage),
+                "output_tokens": usage.get("output_tokens", 0),
+                "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            }
+            os.makedirs(".ralph", exist_ok=True)
+            with open(".ralph/costs.jsonl", "a") as f:
+                f.write(json.dumps(entry) + "\n")
 
 
 def extract_usage(objects: list) -> dict:
@@ -541,7 +550,7 @@ if mode == "bug":
         while True:
             print(f"\n{CLAUDE_HEADER}\n")
             objects = run_claude(open(interview_file).read(), debug=debug, model=claude_model)
-            append_cost(objects)
+            append_cost(objects, spec="bugs")
             response = extract_text(objects)
             print()
 
@@ -661,8 +670,9 @@ if mode == "spec":
     try:
         while True:
             print(f"\n{CLAUDE_HEADER}\n")
+            spec_label = f"{domain}/{feature}"
             objects = run_claude(open(interview_file).read(), debug=debug, model=claude_model)
-            append_cost(objects)
+            append_cost(objects, spec=spec_label)
             response = extract_text(objects)
             print()
 
@@ -687,7 +697,7 @@ if mode == "spec":
                 architect_context = open(interview_file).read()
                 architect_input = f"{architect_prompt}\n\n---\n\n## Interview so far\n\n{architect_context}"
                 arch_objects = run_claude(architect_input, debug=debug, model=claude_model)
-                append_cost(arch_objects)
+                append_cost(arch_objects, spec=spec_label)
                 arch_findings = extract_text(arch_objects)
                 print()
                 with open(interview_file, "a") as f:
