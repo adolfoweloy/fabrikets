@@ -102,6 +102,14 @@ def render_markdown(text: str) -> str:
 
 CONTEXT_WINDOW = 100_000  # target 50% of 200K hard limit to stay in the smart zone
 CONFIG_FILE = "config.yaml"
+DEFAULT_MODELS = {
+    "spec": "claude-sonnet-4-6",
+    "plan": "claude-opus-4-6",
+    "build": "claude-sonnet-4-6",
+    "bug": "claude-sonnet-4-6",
+    "skills": "claude-haiku-4-5-20251001",
+    "readme": "claude-haiku-4-5-20251001",
+}
 
 # Parse arguments
 mode = "spec"
@@ -169,22 +177,26 @@ print_logo()
 
 
 def load_config() -> dict:
-    """Returns {"projects": {"name": "expanded_path", ...}}"""
-    config = {"projects": {}}
-    in_projects = False
+    """Returns {"projects": {...}, "models": {...}}"""
+    config = {"projects": {}, "models": {}}
+    current_section = None
     with open(CONFIG_FILE) as f:
         for line in f:
             stripped = line.strip()
             if not stripped or stripped.startswith("#"):
                 continue
-            if stripped == "projects:":
-                in_projects = True
+            if stripped.endswith(":") and not line.startswith(" "):
+                current_section = stripped[:-1]
                 continue
-            if in_projects and line.startswith("  "):
+            if current_section and line.startswith("  "):
                 key, _, value = stripped.partition(":")
-                config["projects"][key.strip()] = os.path.expanduser(value.strip())
+                val = value.strip()
+                if current_section == "projects":
+                    config["projects"][key.strip()] = os.path.expanduser(val)
+                elif current_section == "models":
+                    config["models"][key.strip()] = val
             else:
-                in_projects = False
+                current_section = None
     return config
 
 
@@ -193,6 +205,10 @@ def save_config(config: dict) -> None:
         f.write("projects:\n")
         for name, path in config["projects"].items():
             f.write(f"  {name}: {path}\n")
+        if config.get("models"):
+            f.write("\nmodels:\n")
+            for mode_name, model_id in config["models"].items():
+                f.write(f"  {mode_name}: {model_id}\n")
 
 
 def ask_choice(question: str, options: list) -> int:
@@ -221,8 +237,10 @@ def run_bootstrap() -> str:
     src = ask("Source directory: ").strip()
     domain = to_snake_case(ask("Initial domain group name (e.g. auth, billing, core): ").strip())
 
-    config = load_config() if os.path.exists(CONFIG_FILE) else {"projects": {}}
+    config = load_config() if os.path.exists(CONFIG_FILE) else {"projects": {}, "models": {}}
     config["projects"][name] = src
+    if not config.get("models"):
+        config["models"] = dict(DEFAULT_MODELS)
     save_config(config)
     print(f"\nProject '{name}' registered → {src}\n")
 
@@ -286,9 +304,13 @@ prompt = open(prompt_file).read()
 if bugs_only:
     prompt = "**IMPORTANT: Only process specs where `domain: bugs`. Skip all other specs.**\n\n" + prompt
 
-# Model selection per mode
-MODE_MODELS = {"plan": "claude-opus-4-6"}
-claude_model = MODE_MODELS.get(mode)
+# Model selection per mode (configurable via config.yaml models section)
+config = load_config() if os.path.exists(CONFIG_FILE) else {"projects": {}, "models": {}}
+if os.path.exists(CONFIG_FILE) and not config.get("models"):
+    config["models"] = dict(DEFAULT_MODELS)
+    save_config(config)
+config_models = config.get("models", {})
+claude_model = config_models.get(mode) or DEFAULT_MODELS.get(mode)
 
 
 def get_files_hash() -> str:

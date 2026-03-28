@@ -49,6 +49,25 @@ uv run ralph.py -p my-api build
 
 If only one project is registered, `-p` is optional — fabrikets uses it automatically. If multiple are registered and `-p` is omitted, fabrikets lists the available projects and exits.
 
+## Model selection
+
+Each phase uses a default model tuned for its complexity. You can override any of them in `config.yaml`:
+
+```yaml
+projects:
+  my-app: ~/src/my-app
+
+models:
+  spec: claude-sonnet-4-6
+  plan: claude-opus-4-6
+  build: claude-sonnet-4-6
+  bug: claude-sonnet-4-6
+  skills: claude-haiku-4-5-20251001
+  readme: claude-haiku-4-5-20251001
+```
+
+The defaults above are written to `config.yaml` on first bootstrap.
+
 ## Workflow
 
 The typical flow is: **spec → plan → build**.
