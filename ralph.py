@@ -574,7 +574,7 @@ def append_cost(objects: list, spec: str = None) -> None:
                 "mode": mode,
                 "spec": spec,
                 "cost_usd": obj.get("total_cost_usd", 0),
-                "input_tokens": usage.get("input_tokens", 0) + usage.get("cache_creation_input_tokens", 0) + usage.get("cache_read_input_tokens", 0),
+                "input_tokens": usage.get("input_tokens", 0),
                 "output_tokens": usage.get("output_tokens", 0),
                 "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
             }
@@ -591,13 +591,8 @@ def extract_usage(objects: list) -> dict:
 
 
 def total_context_tokens(usage: dict) -> int:
-    """Total context window usage: all input token types + output tokens."""
-    return (
-        usage.get("input_tokens", 0)
-        + usage.get("cache_creation_input_tokens", 0)
-        + usage.get("cache_read_input_tokens", 0)
-        + usage.get("output_tokens", 0)
-    )
+    """Total context window usage: input_tokens already includes cached tokens."""
+    return usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
 
 
 def extract_text(objects: list) -> str:
