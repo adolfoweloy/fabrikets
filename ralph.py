@@ -609,8 +609,13 @@ if mode == "spec":
     interview_file = os.path.join(spec_dir, "_interview.md")
 
     if os.path.exists(interview_file):
-        print(f"Spec already exists: {interview_file}")
-        sys.exit(1)
+        confirm = ask(f"Spec already exists at {domain}/{feature}. Override? (y/n): ").strip().lower()
+        if confirm != "y":
+            print("Aborted.")
+            sys.exit(0)
+        import shutil
+        shutil.rmtree(spec_dir)
+        os.makedirs(spec_dir, exist_ok=True)
 
     # Build the initial prompt — prepend existing spec as context if importing
     if existing_spec_content:
