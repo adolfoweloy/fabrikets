@@ -415,7 +415,7 @@ def append_cost(objects: list) -> None:
             cost = str(obj.get("total_cost_usd", ""))[:6]
             usage = obj.get("usage", {})
             ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            line = f"cost: ${cost}  in: {usage.get('input_tokens', 0)}  out: {usage.get('output_tokens', 0)}  [{ts}]\n"
+            line = f"cost: ${cost}  in: {total_input_tokens(usage)}  out: {usage.get('output_tokens', 0)}  [{ts}]\n"
             with open(".ralph/cost.md", "a") as f:
                 f.write(line)
 
@@ -425,6 +425,15 @@ def extract_usage(objects: list) -> dict:
         if obj.get("type") == "result":
             return obj.get("usage", {})
     return {}
+
+
+def total_input_tokens(usage: dict) -> int:
+    """Sum all input token types including cached tokens."""
+    return (
+        usage.get("input_tokens", 0)
+        + usage.get("cache_creation_input_tokens", 0)
+        + usage.get("cache_read_input_tokens", 0)
+    )
 
 
 def extract_text(objects: list) -> str:
@@ -537,7 +546,7 @@ if mode == "bug":
             print()
 
             usage = extract_usage(objects)
-            input_tokens = usage.get("input_tokens", 0)
+            input_tokens = total_input_tokens(usage)
             pct = input_tokens / CONTEXT_WINDOW * 100
             if pct >= 80:
                 color = RED
@@ -658,7 +667,7 @@ if mode == "spec":
             print()
 
             usage = extract_usage(objects)
-            input_tokens = usage.get("input_tokens", 0)
+            input_tokens = total_input_tokens(usage)
             pct = input_tokens / CONTEXT_WINDOW * 100
             if pct >= 80:
                 color = RED
