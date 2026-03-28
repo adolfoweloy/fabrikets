@@ -232,20 +232,20 @@ def to_snake_case(name: str) -> str:
 
 def run_bootstrap() -> str:
     """Register a new project interactively. Returns the resolved src path."""
-    print("\nWelcome to Fabrikets! Let's register a new project.\n")
+    print("\nWelcome to Fabrikets! Let's register a project.\n")
     name = ask("Project name (e.g. my-app): ").strip()
     src = ask("Source directory: ").strip()
-    domain = to_snake_case(ask("Initial domain group name (e.g. auth, billing, core): ").strip())
 
     config = load_config() if os.path.exists(CONFIG_FILE) else {"projects": {}, "models": {}}
     config["projects"][name] = src
     if not config.get("models"):
         config["models"] = dict(DEFAULT_MODELS)
     save_config(config)
-    print(f"\nProject '{name}' registered → {src}\n")
 
     src_expanded = os.path.expanduser(src)
-    os.makedirs(os.path.join(src_expanded, domain), exist_ok=True)
+    os.makedirs(src_expanded, exist_ok=True)
+    print(f"\nProject '{name}' registered → {src}")
+    print("Run 'spec' to start defining features.\n")
     return src_expanded
 
 

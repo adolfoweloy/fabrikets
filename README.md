@@ -21,10 +21,9 @@ On first run, a bootstrap wizard registers your first project:
 ```
 Project name (e.g. my-app): open-mcp-dev
 Source directory: ~/src/open-mcp-dev
-Initial domain group name (e.g. auth, billing, core): auth
 ```
 
-This creates `config.yaml` with the project registered. To register additional projects later:
+This creates `config.yaml` with the project registered. Works with both new and existing repos. To register additional projects later:
 
 ```bash
 uv run ralph.py bootstrap
@@ -160,13 +159,13 @@ uv run ralph.py -p my-app readme
 
 Reads the project's source code, specs, build config, and architecture, then creates or updates `README.md` in the target project. If a README already exists, it preserves accurate content and adds or corrects sections.
 
-### 7. `bootstrap` — register a new project
+### 7. `bootstrap` — register a project
 
 ```bash
 uv run ralph.py bootstrap
 ```
 
-Interactively registers a new project in `config.yaml`. Asks for project name, source directory, and initial domain group.
+Interactively registers a project in `config.yaml`. Asks for project name and source directory. Works with both new and existing repos.
 
 ## Options
 
