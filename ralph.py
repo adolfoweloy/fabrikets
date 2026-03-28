@@ -574,7 +574,7 @@ def append_cost(objects: list, spec: str = None) -> None:
                 "mode": mode,
                 "spec": spec,
                 "cost_usd": obj.get("total_cost_usd", 0),
-                "input_tokens": total_input_tokens(usage),
+                "input_tokens": usage.get("input_tokens", 0) + usage.get("cache_creation_input_tokens", 0) + usage.get("cache_read_input_tokens", 0),
                 "output_tokens": usage.get("output_tokens", 0),
                 "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
             }
@@ -590,12 +590,13 @@ def extract_usage(objects: list) -> dict:
     return {}
 
 
-def total_input_tokens(usage: dict) -> int:
-    """Sum all input token types including cached tokens."""
+def total_context_tokens(usage: dict) -> int:
+    """Total context window usage: all input token types + output tokens."""
     return (
         usage.get("input_tokens", 0)
         + usage.get("cache_creation_input_tokens", 0)
         + usage.get("cache_read_input_tokens", 0)
+        + usage.get("output_tokens", 0)
     )
 
 
@@ -709,15 +710,15 @@ if mode == "bug":
             print()
 
             usage = extract_usage(objects)
-            input_tokens = total_input_tokens(usage)
-            pct = input_tokens / CONTEXT_WINDOW * 100
+            context_tokens = total_context_tokens(usage)
+            pct = context_tokens / CONTEXT_WINDOW * 100
             if pct >= 80:
                 color = RED
             elif pct >= 60:
                 color = YELLOW
             else:
                 color = ""
-            print(f"{color}Context: {input_tokens:,} / {CONTEXT_WINDOW:,} tokens ({pct:.1f}%){RESET}\n")
+            print(f"{color}Context: {context_tokens:,} / {CONTEXT_WINDOW:,} tokens ({pct:.1f}%){RESET}\n")
 
             if "[DONE]" in response:
                 print("Bug documented.")
@@ -831,15 +832,15 @@ if mode == "spec":
             print()
 
             usage = extract_usage(objects)
-            input_tokens = total_input_tokens(usage)
-            pct = input_tokens / CONTEXT_WINDOW * 100
+            context_tokens = total_context_tokens(usage)
+            pct = context_tokens / CONTEXT_WINDOW * 100
             if pct >= 80:
                 color = RED
             elif pct >= 60:
                 color = YELLOW
             else:
                 color = ""
-            print(f"{color}Context: {input_tokens:,} / {CONTEXT_WINDOW:,} tokens ({pct:.1f}%){RESET}\n")
+            print(f"{color}Context: {context_tokens:,} / {CONTEXT_WINDOW:,} tokens ({pct:.1f}%){RESET}\n")
 
             if "[DONE]" in response:
                 print(f"Interview complete. Spec saved to {interview_file}")
