@@ -79,7 +79,7 @@ For bugs: **bug → plan → build**.
 uv run ralph.py -p my-app spec
 ```
 
-Claude interviews you to define a new feature spec. It reads your existing project context, asks structured questions covering functional and non-functional requirements, triggers an architect subagent for review, then writes the spec files to disk and commits them.
+Claude interviews you to define a new feature spec. It reads your existing project context, asks structured questions covering functional and non-functional requirements, triggers an architect subagent for review, then writes the spec files to disk and commits them. If a spec already exists for the given domain/feature, you'll be asked to confirm before overriding it.
 
 Each interview creates a directory under `<src>/specs/<domain>/<feature>/`:
 
@@ -113,7 +113,7 @@ uv run ralph.py -p my-app plan
 
 Reads `specs/architecture.md` and all spec files, then creates `specs/<domain>/<feature>/implementation_plan.md` for each spec. Each task gets a priority (`high`, `medium`, `low`) based on how critical it is — core/foundational work is high, features building on the core are medium, polish and edge cases are low. Also updates `design.md` with any implementation decisions made during planning. Commits after each spec is planned.
 
-Plan mode uses Opus for deeper analysis.
+Plan mode uses Opus by default for deeper analysis (configurable via the `models:` section in `config.yaml`).
 
 ### 3. `build` — implement
 
@@ -189,7 +189,7 @@ prompt_build.md       # instructions for Claude in build mode
 prompt_bug.md         # instructions for Claude in bug mode
 prompt_skills.md      # instructions for Claude in skills mode
 prompt_readme.md      # instructions for Claude in readme mode
-config.yaml           # named project registry (not git-tracked)
+config.yaml           # project registry + model config (not git-tracked)
 
 <src>/                # your project source directory
   specs/
