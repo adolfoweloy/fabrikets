@@ -604,6 +604,8 @@ if mode == "spec":
         sys.exit(0)
     feature = to_snake_case(feature_raw)
 
+    description = ask("Brief description: ").strip()
+
     spec_dir = os.path.join(specs_dir, domain, feature)
     os.makedirs(spec_dir, exist_ok=True)
     interview_file = os.path.join(spec_dir, "_interview.md")
@@ -641,6 +643,8 @@ if mode == "spec":
         f.write(f"<!-- domain: {domain} -->\n")
         f.write(f"<!-- feature: {feature} -->\n")
         f.write(f"<!-- spec_dir: {spec_dir_rel} -->\n\n")
+        if description:
+            f.write(f"## User Description\n\n{description}\n\n---\n\n")
         f.write(interview_prompt)
 
     print(f"Spec: {spec_dir_rel}/")
