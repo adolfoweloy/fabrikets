@@ -287,7 +287,7 @@ if bugs_only:
     prompt = "**IMPORTANT: Only process specs where `domain: bugs`. Skip all other specs.**\n\n" + prompt
 
 # Model selection per mode
-MODE_MODELS = {"plan": "claude-opus-4-5-20250115"}
+MODE_MODELS = {"plan": "claude-opus-4-6"}
 claude_model = MODE_MODELS.get(mode)
 
 
