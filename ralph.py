@@ -357,46 +357,52 @@ def run_claude(prompt: str, debug: bool = False, model: str = None) -> list:
     spinner.start()
 
     objects = []
-    for line in proc.stdout:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        objects.append(obj)
+    try:
+        for line in proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            objects.append(obj)
 
-        obj_type = obj.get("type")
-        printed_text = False
-        if obj_type == "assistant":
-            for block in obj.get("message", {}).get("content", []):
-                if block.get("type") == "text":
-                    text = block.get("text", "")
-                    if text:
+            obj_type = obj.get("type")
+            printed_text = False
+            if obj_type == "assistant":
+                for block in obj.get("message", {}).get("content", []):
+                    if block.get("type") == "text":
+                        text = block.get("text", "")
+                        if text:
+                            spinner.stop()
+                            print(render_markdown(text), end="", flush=True)
+                            printed_text = True
+                    elif block.get("type") == "tool_use":
                         spinner.stop()
-                        print(render_markdown(text), end="", flush=True)
-                        printed_text = True
-                elif block.get("type") == "tool_use":
-                    spinner.stop()
-                    name = block.get("name", "")
-                    summary = format_tool_input(name, block.get("input", {}))
-                    if debug:
-                        print(f"{CYAN}[{name}] {summary}{RESET}")
-                    else:
-                        print(f"{DIM}  [{name}] {summary}{RESET}")
-                    spinner.start()
-        elif obj_type == "user":
-            for block in obj.get("message", {}).get("content", []):
-                if block.get("type") == "tool_result" and block.get("is_error"):
-                    spinner.stop()
-                    content = block.get("content", "")
-                    if isinstance(content, list):
-                        content = " ".join(b.get("text", "") for b in content)
-                    print(f"{RED}  ERROR: {str(content)[:150]}{RESET}")
+                        name = block.get("name", "")
+                        summary = format_tool_input(name, block.get("input", {}))
+                        if debug:
+                            print(f"{CYAN}[{name}] {summary}{RESET}")
+                        else:
+                            print(f"{DIM}  [{name}] {summary}{RESET}")
+                        spinner.start()
+            elif obj_type == "user":
+                for block in obj.get("message", {}).get("content", []):
+                    if block.get("type") == "tool_result" and block.get("is_error"):
+                        spinner.stop()
+                        content = block.get("content", "")
+                        if isinstance(content, list):
+                            content = " ".join(b.get("text", "") for b in content)
+                        print(f"{RED}  ERROR: {str(content)[:150]}{RESET}")
 
-        if not printed_text:
-            spinner.start()
+            if not printed_text:
+                spinner.start()
+    except KeyboardInterrupt:
+        proc.terminate()
+        proc.wait()
+        spinner.stop()
+        raise
 
     spinner.stop()
     proc.wait()
@@ -587,7 +593,7 @@ if mode == "spec":
     ) if os.path.isdir(specs_dir) else []
     if existing_domains:
         print(f"Existing domains: {', '.join(existing_domains)}")
-    domain = to_snake_case(ask("Domain group name: ").strip())
+    domain = to_snake_case(ask("Domain (e.g. auth, billing, core): ").strip())
     if not domain:
         print("Aborted.")
         sys.exit(0)
