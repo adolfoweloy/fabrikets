@@ -118,6 +118,7 @@ debug = False
 project_name = None
 message = None
 bugs_only = False
+cost_by_feature = False
 
 def print_help():
     print("""
@@ -131,6 +132,7 @@ Commands:
   skills      Discover project tooling and create Claude Code skills
   readme      Create or update the project README.md
   bootstrap   Register a new project in config.yaml
+  cost        Show cost breakdown (use -f for per-feature, -p for per-project)
 
 Options:
   -p, --project NAME      Project to work on (as registered in config.yaml)
@@ -150,7 +152,7 @@ while i < len(args):
     elif args[i] == "--max-iterations":
         i += 1
         max_iterations = int(args[i])
-    elif args[i] in ("spec", "plan", "build", "bug", "skills", "readme", "bootstrap"):
+    elif args[i] in ("spec", "plan", "build", "bug", "skills", "readme", "bootstrap", "cost"):
         mode = args[i]
     elif args[i] in ("-d", "--debug"):
         debug = True
@@ -162,6 +164,8 @@ while i < len(args):
         message = args[i]
     elif args[i] == "--bugs":
         bugs_only = True
+    elif args[i] == "-f":
+        cost_by_feature = True
     else:
         print(f"Error: unknown argument '{args[i]}'", file=sys.stderr)
         print("Run './ralph.py --help' for usage.", file=sys.stderr)
@@ -290,6 +294,101 @@ def resolve_project() -> str:
         print(f"  -p {n:<20} {p}", file=sys.stderr)
     sys.exit(1)
 
+
+def run_cost():
+    """Show cost breakdown from .ralph/costs.jsonl."""
+    costs_file = ".ralph/costs.jsonl"
+    if not os.path.exists(costs_file):
+        print("No cost data yet.")
+        sys.exit(0)
+
+    entries = []
+    with open(costs_file) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                entries.append(json.loads(line))
+
+    if not entries:
+        print("No cost data yet.")
+        sys.exit(0)
+
+    if cost_by_feature:
+        # Group by project + spec
+        groups = {}
+        for e in entries:
+            key = f"{e.get('project', 'unknown')}/{e.get('spec') or e.get('mode', 'unknown')}"
+            if key not in groups:
+                groups[key] = {"cost": 0, "input": 0, "output": 0, "calls": 0}
+            groups[key]["cost"] += e.get("cost_usd", 0)
+            groups[key]["input"] += e.get("input_tokens", 0)
+            groups[key]["output"] += e.get("output_tokens", 0)
+            groups[key]["calls"] += 1
+
+        print(f"\n{'Feature':<40} {'Cost':>10} {'Input':>10} {'Output':>10} {'Calls':>6}")
+        print("-" * 80)
+        for key in sorted(groups):
+            g = groups[key]
+            print(f"{key:<40} ${g['cost']:>9.4f} {g['input']:>10,} {g['output']:>10,} {g['calls']:>6}")
+        total_cost = sum(g["cost"] for g in groups.values())
+        print("-" * 80)
+        print(f"{'Total':<40} ${total_cost:>9.4f}")
+
+    elif project_name:
+        # Filter by project
+        filtered = [e for e in entries if e.get("project") == project_name]
+        if not filtered:
+            print(f"No cost data for project '{project_name}'.")
+            sys.exit(0)
+
+        # Group by mode
+        groups = {}
+        for e in filtered:
+            m = e.get("mode", "unknown")
+            if m not in groups:
+                groups[m] = {"cost": 0, "input": 0, "output": 0, "calls": 0}
+            groups[m]["cost"] += e.get("cost_usd", 0)
+            groups[m]["input"] += e.get("input_tokens", 0)
+            groups[m]["output"] += e.get("output_tokens", 0)
+            groups[m]["calls"] += 1
+
+        print(f"\nProject: {project_name}")
+        print(f"\n{'Mode':<20} {'Cost':>10} {'Input':>10} {'Output':>10} {'Calls':>6}")
+        print("-" * 60)
+        for m in sorted(groups):
+            g = groups[m]
+            print(f"{m:<20} ${g['cost']:>9.4f} {g['input']:>10,} {g['output']:>10,} {g['calls']:>6}")
+        total_cost = sum(g["cost"] for g in groups.values())
+        print("-" * 60)
+        print(f"{'Total':<20} ${total_cost:>9.4f}")
+
+    else:
+        # Group by project
+        groups = {}
+        for e in entries:
+            p = e.get("project", "unknown")
+            if p not in groups:
+                groups[p] = {"cost": 0, "input": 0, "output": 0, "calls": 0}
+            groups[p]["cost"] += e.get("cost_usd", 0)
+            groups[p]["input"] += e.get("input_tokens", 0)
+            groups[p]["output"] += e.get("output_tokens", 0)
+            groups[p]["calls"] += 1
+
+        print(f"\n{'Project':<30} {'Cost':>10} {'Input':>10} {'Output':>10} {'Calls':>6}")
+        print("-" * 70)
+        for p in sorted(groups):
+            g = groups[p]
+            print(f"{p:<30} ${g['cost']:>9.4f} {g['input']:>10,} {g['output']:>10,} {g['calls']:>6}")
+        total_cost = sum(g["cost"] for g in groups.values())
+        print("-" * 70)
+        print(f"{'Total':<30} ${total_cost:>9.4f}")
+
+    print()
+    sys.exit(0)
+
+
+if mode == "cost":
+    run_cost()
 
 src = resolve_project()
 os.makedirs(src, exist_ok=True)

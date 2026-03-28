@@ -167,12 +167,23 @@ uv run ralph.py bootstrap
 
 Interactively registers a project in `config.yaml`. Asks for project name and source directory. Works with both new and existing repos.
 
+### 8. `cost` — show cost breakdown
+
+```bash
+uv run ralph.py cost              # total cost per project
+uv run ralph.py cost -p my-app    # cost per mode for a specific project
+uv run ralph.py cost -f           # cost per feature across all projects
+```
+
+Reads `.ralph/costs.jsonl` and shows cost, token usage, and call counts grouped by project, mode, or feature.
+
 ## Options
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-p`, `--project` | — | Project name to work on (as registered in `config.yaml`) |
 | `-m`, `--message TEXT` | — | Inline bug description (used with `bug` to skip editor) |
+| `-f` | off | Show per-feature cost breakdown (used with `cost`) |
 | `--bugs` | off | Only process bug specs (used with `build` or `plan`) |
 | `--max-iterations N` | `5` | How many specs/tasks to process per run |
 | `-d`, `--debug` | off | Show full tool call details from Claude in the terminal |
