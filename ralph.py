@@ -251,6 +251,7 @@ def run_bootstrap() -> str:
 
 def resolve_project() -> str:
     """Resolve the src directory for the active project. Exits on error."""
+    global project_name
     if mode == "bootstrap":
         src = run_bootstrap()
         sys.exit(0)
@@ -279,7 +280,6 @@ def resolve_project() -> str:
         return run_bootstrap()
 
     if len(projects) == 1:
-        global project_name
         name, path = next(iter(projects.items()))
         project_name = name
         print(f"Project: {name}  ({path})")
