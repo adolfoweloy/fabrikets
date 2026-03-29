@@ -225,6 +225,43 @@ Lists all specs for a project grouped by domain, showing feature name, descripti
 | `-d`, `--debug` | off | Show full tool call details from Claude in the terminal |
 | `-h`, `--help` | — | Show help message |
 
+## Memory profiling
+
+To diagnose high memory usage, set `RALPH_MEMORY_DEBUG=1` before running any command:
+
+```bash
+RALPH_MEMORY_DEBUG=1 uv run ralph.py -p my-app plan
+RALPH_MEMORY_DEBUG=1 uv run ralph.py -p my-app build
+```
+
+This instruments every phase boundary with RSS checkpoints and `tracemalloc` snapshots using only stdlib — no extra dependencies. During the run, `[MEM]` lines are printed in real-time:
+
+```
+[MEM]    0.0s    124032 KB  startup
+[MEM]    1.2s    131440 KB  phase1:assessment:start
+[MEM]   18.7s    198312 KB  phase1:assessment:end assess_len=4821
+[MEM ALLOC] Top 5 at: phase1:assessment:end
+  ralph.py:555: size=42.3 MiB, count=1821, average=23.8 KiB
+  ...
+[MEM]   19.1s    201000 KB  phase2:research:start
+[MEM]   19.3s    203100 KB  phase2:agent:file_mapping:start
+...
+```
+
+At the end of the run, a summary table shows peak RSS per checkpoint:
+
+```
+[MEM SUMMARY] ──────────────────────────────────────────────────
+  Checkpoint                                           RSS (KB)      Time
+  ──────────────────────────────────────────────────  ──────────  ────────
+  startup                                               124,032      0.0s
+  phase2:research:complete results=4                    521,888    142.3s <-- PEAK
+  ...
+  Peak: 521,888 KB (509.6 MB)
+```
+
+Checkpoints are added at: startup, every `run_claude`/`run_claude_quiet` call, each research agent start/end (including concurrent ones), each plan phase transition, each validation round, each reflection round, and each build iteration.
+
 ## Project layout
 
 ```
