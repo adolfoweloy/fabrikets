@@ -158,6 +158,7 @@ DEFAULT_MODELS = {
     "plan": "claude-opus-4-6",
     "plan_validation": "claude-haiku-4-5-20251001",
     "build": "claude-sonnet-4-6",
+    "build_review": "claude-haiku-4-5-20251001",
     "bug": "claude-sonnet-4-6",
     "skills": "claude-haiku-4-5-20251001",
     "readme": "claude-haiku-4-5-20251001",
@@ -165,6 +166,16 @@ DEFAULT_MODELS = {
 
 DEFAULT_PLAN_CONFIG = {
     "max_reflections": 3,
+}
+
+TIER_BUILD_THRESHOLDS = {
+    "light": 80,
+    "medium": 85,
+    "heavy": 90,
+}
+
+DEFAULT_BUILD_CONFIG = {
+    "max_reflections": 2,
 }
 
 TIER_THRESHOLDS = {
@@ -255,8 +266,8 @@ print_logo()
 
 
 def load_config() -> dict:
-    """Returns {"projects": {...}, "models": {...}, "plan": {...}}"""
-    config = {"projects": {}, "models": {}, "plan": {}}
+    """Returns {"projects": {...}, "models": {...}, "plan": {...}, "build": {...}}"""
+    config = {"projects": {}, "models": {}, "plan": {}, "build": {}}
     current_section = None
     with open(CONFIG_FILE) as f:
         for line in f:
@@ -273,13 +284,13 @@ def load_config() -> dict:
                     config["projects"][key.strip()] = os.path.expanduser(val)
                 elif current_section == "models":
                     config["models"][key.strip()] = val
-                elif current_section == "plan":
+                elif current_section in ("plan", "build"):
                     # Convert numeric values
                     try:
                         val = int(val)
                     except (ValueError, TypeError):
                         pass
-                    config["plan"][key.strip()] = val
+                    config[current_section][key.strip()] = val
             else:
                 current_section = None
     return config
@@ -1071,6 +1082,438 @@ def _update_plan_status(plan_file: str, new_status: str):
             f.write(updated)
 
 
+# ─── Build mode helpers ────────────────────────────────────────────────────────
+
+def _parse_specs_yaml(specs_yaml_path: str) -> list:
+    """Parse specs.yaml into a list of dicts. Reuses the approach from 'specs' mode."""
+    specs = []
+    current = {}
+    with open(specs_yaml_path) as f:
+        for line in f:
+            stripped = line.strip()
+            if stripped.startswith("- id:"):
+                if current:
+                    specs.append(current)
+                current = {"id": stripped[5:].strip()}
+            elif stripped.startswith("domain:"):
+                current["domain"] = stripped[7:].strip()
+            elif stripped.startswith("feature:"):
+                current["feature"] = stripped[8:].strip()
+            elif stripped.startswith("status:"):
+                current["status"] = stripped[7:].strip()
+    if current:
+        specs.append(current)
+    return specs
+
+
+def _find_next_todo_task(plan_content: str) -> dict | None:
+    """Parse tasks from implementation_plan.md and return the highest-priority todo task."""
+    tasks = []
+    # Split into task blocks on '  - task:' boundaries (2-space indent)
+    task_blocks = re.split(r'(?=  - task:)', plan_content)
+    for block in task_blocks:
+        if not block.strip().startswith("- task:"):
+            continue
+        task_m = re.match(r'  - task: ?(.*)', block)
+        if not task_m:
+            continue
+        task_text = task_m.group(1).strip().strip('"\'')
+        # Handle YAML block scalar (>): collect indented continuation lines
+        if task_text == ">":
+            continuation = re.findall(r'\n      (.+)', block)
+            task_text = " ".join(continuation)
+
+        priority_m = re.search(r'\n    priority: (\S+)', block)
+        status_m = re.search(r'\n    status: (\S+)', block)
+        refs_ms = re.findall(r'\n      - (.+)', block)
+
+        tasks.append({
+            "task": task_text,
+            "_block": block,
+            "priority": priority_m.group(1) if priority_m else "medium",
+            "status": status_m.group(1) if status_m else "todo",
+            "refs": [r.strip().strip('"\'') for r in refs_ms],
+        })
+
+    todo_tasks = [t for t in tasks if t["status"] == "todo"]
+    if not todo_tasks:
+        return None
+    priority_order = {"high": 0, "medium": 1, "low": 2}
+    todo_tasks.sort(key=lambda t: priority_order.get(t["priority"], 1))
+    return todo_tasks[0]
+
+
+def _update_task_status_in_plan(plan_file: str, task: dict, new_status: str) -> None:
+    """Update a specific task's status field in implementation_plan.md."""
+    content = read_file_safe(plan_file)
+    if not content or "_block" not in task:
+        return
+    old_block = task["_block"]
+    new_block = re.sub(r'(\n    status: )\S+', rf'\g<1>{new_status}', old_block)
+    updated = content.replace(old_block, new_block, 1)
+    if updated != content:
+        with open(plan_file, "w") as f:
+            f.write(updated)
+
+
+def find_next_build_task() -> dict | None:
+    """Find the next todo task across all specs with validated plans.
+    Returns a dict with spec/task info, or None if nothing to do.
+    """
+    specs_yaml = os.path.join(src, "specs", "specs.yaml")
+    if not os.path.exists(specs_yaml):
+        return None
+
+    specs = _parse_specs_yaml(specs_yaml)
+    if bugs_only:
+        specs = [s for s in specs if s.get("domain") == "bugs"]
+
+    for spec in specs:
+        domain = spec.get("domain", "")
+        feature = spec.get("feature", "")
+        spec_id = spec.get("id", "")
+        if not domain or not feature:
+            continue
+
+        spec_dir_abs = os.path.join(src, "specs", domain, feature)
+        plan_file = os.path.join(spec_dir_abs, "implementation_plan.md")
+        if not os.path.exists(plan_file):
+            continue
+
+        plan_content = read_file_safe(plan_file)
+
+        # Top-level status must be "done" (plan validated and ready to build)
+        m = re.search(r"^status: (\S+)", plan_content, re.MULTILINE)
+        if not m or m.group(1) != "done":
+            continue
+
+        tier_m = re.search(r"^tier: (\S+)", plan_content, re.MULTILINE)
+        tier = tier_m.group(1) if tier_m else "medium"
+
+        task = _find_next_todo_task(plan_content)
+        if task:
+            return {
+                "spec_id": spec_id,
+                "domain": domain,
+                "feature": feature,
+                "tier": tier,
+                "spec_dir_abs": spec_dir_abs,
+                "plan_file": plan_file,
+                "task": task,
+            }
+    return None
+
+
+def write_build_context(build_info: dict) -> None:
+    """Assemble and write build_context.md with all context needed by Claude phases."""
+    domain = build_info["domain"]
+    feature = build_info["feature"]
+    spec_id = build_info["spec_id"]
+    tier = build_info["tier"]
+    spec_dir_abs = build_info["spec_dir_abs"]
+    spec_dir_rel = os.path.join("specs", domain, feature)
+    task = build_info["task"]
+
+    overview = read_file_safe(os.path.join(spec_dir_abs, "overview.md"))
+    requirements = read_file_safe(os.path.join(spec_dir_abs, "requirements.md"))
+    research = read_file_safe(os.path.join(spec_dir_abs, "research.md"))
+    architecture = read_file_safe(os.path.join(src, "specs", "architecture.md"))
+    plan_content = read_file_safe(build_info["plan_file"])
+
+    # Load extra ref files (skip those already included above)
+    already_included = {overview, requirements, research, architecture}
+    extra_refs = []
+    for ref in task.get("refs", []):
+        ref_path = os.path.join(src, ref)
+        ref_content = read_file_safe(ref_path)
+        if ref_content and ref_content not in already_included:
+            extra_refs.append((ref, ref_content))
+            already_included.add(ref_content)
+
+    # Extract acceptance criteria block from plan
+    ac_m = re.search(r'(acceptance_criteria:\n(?:  - .+\n?)+)', plan_content)
+    acceptance_criteria = ac_m.group(1) if ac_m else ""
+
+    # Summarise plan progress
+    done_tasks = re.findall(r'  - task: (.+)', plan_content)
+    done_statuses = re.findall(r'    status: (\S+)', plan_content)
+    task_summaries = list(zip(done_tasks, done_statuses))
+    done_list = [t for t, s in task_summaries if s == "done"]
+    todo_list = [t for t, s in task_summaries if s == "todo"]
+
+    lines = [
+        "# Build Context",
+        "",
+        "## Task to Implement",
+        f"**Spec**: {domain}/{feature}  |  **ID**: {spec_id}  |  **Tier**: {tier}  |  **Priority**: {task['priority']}",
+        f"**Spec directory**: {spec_dir_rel}",
+        "",
+        "### Task Description",
+        task["task"],
+        "",
+    ]
+
+    if architecture:
+        lines += ["## Architecture", architecture, ""]
+    if overview:
+        lines += ["## Spec: Overview", overview, ""]
+    if requirements:
+        lines += ["## Spec: Requirements", requirements, ""]
+    if research:
+        lines += ["## Research Findings", research, ""]
+    for ref_name, ref_content in extra_refs:
+        lines += [f"## Reference: {ref_name}", ref_content, ""]
+    if acceptance_criteria:
+        lines += ["## Acceptance Criteria", acceptance_criteria, ""]
+
+    lines += ["## Plan Progress"]
+    if done_list:
+        lines.append("**Already done:**")
+        for t in done_list[:8]:
+            lines.append(f"- {t.strip()[:100]}")
+    if todo_list:
+        lines.append("**Remaining todo (after this task):**")
+        for t in todo_list[1:6]:  # skip index 0 = current task
+            lines.append(f"- {t.strip()[:100]}")
+    lines.append("")
+
+    with open(os.path.join(spec_dir_abs, "build_context.md"), "w") as f:
+        f.write("\n".join(lines))
+
+
+def _check_acceptance_criteria(build_info: dict) -> bool:
+    """Check acceptance criteria via Claude. Returns True if all pass (or new tasks added)."""
+    spec_dir_abs = build_info["spec_dir_abs"]
+    domain = build_info["domain"]
+    feature = build_info["feature"]
+    spec_dir_rel = os.path.join("specs", domain, feature)
+
+    config = load_config() if os.path.exists(CONFIG_FILE) else {}
+    build_model = config.get("models", {}).get("build") or DEFAULT_MODELS["build"]
+
+    criteria_prompt = f"""You are verifying acceptance criteria for a completed feature.
+
+Read:
+- `{spec_dir_rel}/implementation_plan.md` — the acceptance_criteria field
+- `{spec_dir_rel}/overview.md` and `{spec_dir_rel}/requirements.md` — the spec
+- The actual source files to verify each criterion is satisfied
+
+For each acceptance criterion, check whether it is genuinely satisfied in the current code.
+
+Output a JSON object:
+{{
+  "criteria": [
+    {{"text": "criterion description", "pass": true, "reason": "why it passes or fails"}}
+  ]
+}}
+
+If any criterion fails, also add new `todo` tasks to `{spec_dir_rel}/implementation_plan.md` to address the gap.
+Append them under the existing `tasks:` list with `status: todo` and `priority: high`.
+
+Output `[DONE]` when finished."""
+
+    crit_objects, crit_text = run_claude_quiet(criteria_prompt, model=build_model)
+    append_cost(crit_objects, spec=f"{domain}/{feature}")
+
+    result = extract_json_block(crit_text)
+    if not result:
+        return True
+
+    for criterion in result.get("criteria", []):
+        text = criterion.get("text", "?")[:70]
+        passed = criterion.get("pass", True)
+        reason = criterion.get("reason", "")
+        color = GREEN if passed else RED
+        marker = "pass" if passed else "FAIL"
+        print(f"    {color}[CRITERIA] {text} → {marker}{RESET}")
+        if not passed and reason:
+            print(f"           {DIM}{reason}{RESET}")
+
+    return all(c.get("pass", True) for c in result.get("criteria", []))
+
+
+def run_build() -> bool:
+    """Execute one build task through the full phase pipeline.
+    Returns True if a task was processed, False if nothing to do.
+    """
+    config = load_config() if os.path.exists(CONFIG_FILE) else {"projects": {}, "models": {}, "plan": {}, "build": {}}
+    config_models = config.get("models", {})
+    build_config = config.get("build", {})
+    max_reflections = build_config.get("max_reflections", DEFAULT_BUILD_CONFIG["max_reflections"])
+
+    build_model = config_models.get("build") or DEFAULT_MODELS["build"]
+    review_model = config_models.get("build_review") or DEFAULT_MODELS["build_review"]
+
+    fabrikets_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # === Phase 1: Context Assembly ===
+    print(f"\n{BOLD}Phase 1: Task Selection{RESET} — finding next todo task")
+    _mem_checkpoint("build:phase1:start")
+
+    build_info = find_next_build_task()
+    if not build_info:
+        return False
+
+    domain = build_info["domain"]
+    feature = build_info["feature"]
+    spec_id = build_info["spec_id"]
+    tier = build_info["tier"]
+    spec_dir_abs = build_info["spec_dir_abs"]
+    spec_dir_rel = os.path.join("specs", domain, feature)
+    plan_file = build_info["plan_file"]
+    task = build_info["task"]
+
+    print(f"  Spec: {BOLD}{domain}/{feature}{RESET}")
+    print(f"  Task: {task['task'][:80]}{'...' if len(task['task']) > 80 else ''}")
+    print(f"  Priority: {task['priority']}  |  Tier: {tier}")
+
+    write_build_context(build_info)
+    _mem_checkpoint("build:phase1:context_written")
+
+    threshold = TIER_BUILD_THRESHOLDS.get(tier, 85)
+
+    # === Phase 2: Implementation ===
+    print(f"\n{BOLD}Phase 2: Implementation{RESET}\n")
+    print(f"{CLAUDE_HEADER}\n")
+    _mem_checkpoint("build:phase2:start")
+
+    implement_prompt = open(os.path.join(fabrikets_dir, "prompt_build_implement.md")).read()
+    implement_prompt = implement_prompt.replace("{spec_dir}", spec_dir_rel)
+    objects = run_claude(implement_prompt, debug=debug, model=build_model)
+    append_cost(objects, spec=f"{domain}/{feature}")
+    _mem_checkpoint("build:phase2:end")
+    print()
+
+    # === Phase 3 + 4 + 5: Validate / Review / Reflect loop ===
+    review = {}
+    total_pct = 0
+
+    for reflection_round in range(max_reflections + 1):
+        # Phase 3: Validation
+        print(f"\n{BOLD}Phase 3: Validation{RESET} (round {reflection_round + 1}/{max_reflections + 1})\n")
+        print(f"{CLAUDE_HEADER}\n")
+        _mem_checkpoint(f"build:phase3:round={reflection_round}:start")
+
+        validate_prompt = open(os.path.join(fabrikets_dir, "prompt_build_validate.md")).read()
+        validate_prompt = validate_prompt.replace("{spec_dir}", spec_dir_rel)
+        objects = run_claude(validate_prompt, debug=debug, model=build_model)
+        append_cost(objects, spec=f"{domain}/{feature}")
+        _mem_checkpoint(f"build:phase3:round={reflection_round}:end")
+        print()
+
+        # Phase 4: Code Review Scoring (Haiku)
+        print(f"  Scoring with {review_model}...")
+        _mem_checkpoint(f"build:phase4:round={reflection_round}:start")
+
+        review_prompt = open(os.path.join(fabrikets_dir, "prompt_build_review.md")).read()
+        review_prompt = review_prompt.replace("{spec_dir}", spec_dir_rel)
+        rev_objects, rev_text = run_claude_quiet(review_prompt, model=review_model)
+        append_cost(rev_objects, spec=f"{domain}/{feature}")
+        _mem_checkpoint(f"build:phase4:round={reflection_round}:end")
+
+        review = extract_json_block(rev_text)
+        # Fallback: try reading build_review.json directly if Claude wrote it to disk
+        if not review:
+            review_file = os.path.join(spec_dir_abs, "build_review.json")
+            if os.path.exists(review_file):
+                try:
+                    with open(review_file) as f:
+                        review = json.loads(f.read())
+                except json.JSONDecodeError:
+                    pass
+
+        if not review:
+            print(f"{YELLOW}  WARNING: Could not parse review scores. Proceeding.{RESET}")
+            break
+
+        total_pct = review.get("total_percent", 0)
+        print(f"\n  {BOLD}Score: {total_pct}%{RESET} (threshold: {threshold}%)\n")
+
+        for criterion, data in review.get("scores", {}).items():
+            score = data.get("score", 0)
+            max_score = data.get("max", 10)
+            issues = data.get("issues", [])
+            color = GREEN if score >= 8 else YELLOW if score >= 6 else RED
+            label = criterion.replace("_", " ").title()
+            print(f"    {color}{score}/{max_score}{RESET}  {label}")
+            for issue in issues[:2]:
+                print(f"          {DIM}{issue}{RESET}")
+
+        summary = review.get("summary", "")
+        if summary:
+            print(f"\n  {DIM}{summary}{RESET}")
+
+        if total_pct >= threshold:
+            print(f"\n  {GREEN}Implementation passed review.{RESET}")
+            break
+
+        if reflection_round >= max_reflections:
+            print(f"\n{PINK}{BOLD}  WARNING: Task did not reach quality threshold")
+            print(f"  after {max_reflections} reflection(s) (scored {total_pct}%, needed {threshold}%).")
+            print(f"  Review {spec_dir_rel}/implementation_plan.md before merging.{RESET}")
+            break
+
+        # Phase 5: Reflection
+        print(f"\n  {BOLD}Reflecting{RESET} (round {reflection_round + 1}/{max_reflections})...\n")
+        print(f"{CLAUDE_HEADER}\n")
+        _mem_checkpoint(f"build:phase5:round={reflection_round}:start")
+
+        reflect_template = open(os.path.join(fabrikets_dir, "prompt_build_reflect.md")).read()
+        reflect_prompt = (reflect_template
+            .replace("{spec_dir}", spec_dir_rel)
+            .replace("{reflection_round}", str(reflection_round + 1))
+            .replace("{max_reflections}", str(max_reflections))
+            .replace("{score}", str(total_pct))
+        )
+        objects = run_claude(reflect_prompt, debug=debug, model=build_model)
+        append_cost(objects, spec=f"{domain}/{feature}")
+        _mem_checkpoint(f"build:phase5:round={reflection_round}:end")
+        print()
+
+    # === Phase 6: Finalise ===
+    _mem_checkpoint("build:phase6:start")
+    _update_task_status_in_plan(plan_file, task, "done")
+    print(f"\n  {GREEN}Task marked done.{RESET}")
+
+    # Check if all tasks are now done — if so, verify acceptance criteria
+    plan_content_updated = read_file_safe(plan_file)
+    remaining = _find_next_todo_task(plan_content_updated)
+    if not remaining:
+        print(f"\n  All tasks done. Verifying acceptance criteria...")
+        all_passed = _check_acceptance_criteria(build_info)
+        if all_passed:
+            _update_plan_status(plan_file, "complete")
+            specs_yaml = os.path.join(src, "specs", "specs.yaml")
+            specs_content = read_file_safe(specs_yaml)
+            updated = re.sub(
+                rf"(- id: {re.escape(spec_id)}\n(?:    \w+:.*\n)*?    status:) \w+",
+                rf"\1 done",
+                specs_content,
+            )
+            if updated != specs_content:
+                with open(specs_yaml, "w") as f:
+                    f.write(updated)
+            print(f"  {GREEN}Spec {domain}/{feature} complete — all acceptance criteria passed.{RESET}")
+
+    # Commit
+    score_str = f" (score: {total_pct}%)" if total_pct else ""
+    subprocess.run(["git", "add", "-A"], cwd=os.path.abspath(src), capture_output=True)
+    commit_msg = f"{spec_id}: {task['task'][:60]}{score_str}"
+    subprocess.run(["git", "commit", "-m", commit_msg], cwd=os.path.abspath(src), capture_output=True)
+
+    # Clean up build artifacts
+    for fname in ("build_context.md", "build_implementation.md", "build_validation.md",
+                  "build_review.json", "build_reflection.log"):
+        fpath = os.path.join(spec_dir_abs, fname)
+        if os.path.exists(fpath):
+            os.unlink(fpath)
+
+    _mem_checkpoint("build:phase6:end")
+    return True
+
+
+# ─── Plan mode: full orchestrated lifecycle (assess → research → plan → validate → reflect) ──
+
 # Plan mode: full orchestrated lifecycle (assess → research → plan → validate → reflect)
 if mode == "plan":
     print(f"Running in plan mode (RPI: research → plan → validate)\n")
@@ -1331,59 +1774,37 @@ if mode == "spec":
 
     sys.exit(0)
 
-# Main loop
-loop_start = datetime.now()
-try:
-    for iteration in range(1, max_iterations + 1):
-        iter_start = datetime.now()
-        print(f"\n=== Iteration {iteration}/{max_iterations} starting at {iter_start.strftime('%c')} ===")
-        _mem_checkpoint(f"build:iteration={iteration}:start")
-        before_hash = get_files_hash()
+# Build mode: multi-phase implement → validate → review → reflect loop
+if mode == "build":
+    print(f"Running in build mode (multi-phase: implement → validate → review)\n")
+    loop_start = datetime.now()
+    try:
+        for iteration in range(1, max_iterations + 1):
+            iter_start = datetime.now()
+            print(f"\n{'='*60}")
+            print(f"Build iteration {iteration}/{max_iterations} — {iter_start.strftime('%c')}")
+            print(f"{'='*60}")
+            _mem_checkpoint(f"build:iteration={iteration}:start")
 
-        print("Sending prompt to Claude...")
-        print("\n--- Claude's response ---")
-        objects = run_claude(prompt, debug=debug, model=claude_model)
-        elapsed = int((datetime.now() - iter_start).total_seconds())
-        print(f"\n--- End response --- ({elapsed // 60}m {elapsed % 60}s)\n")
-        _mem_checkpoint(f"build:iteration={iteration}:end objects={len(objects)}")
-        _mem_snapshot(f"build:iteration={iteration}:end")
+            had_work = run_build()
 
-        append_cost(objects)
+            _mem_checkpoint(f"build:iteration={iteration}:end")
+            elapsed = int((datetime.now() - iter_start).total_seconds())
+            print(f"\nIteration {iteration} done ({elapsed // 60}m {elapsed % 60}s)")
 
-        # Check for API errors
-        has_result = any(obj.get("type") == "result" for obj in objects)
-        if not has_result:
-            print(f"{RED}ERROR: No result from API. Possible causes:{RESET}")
-            print("  - Rate limit exceeded")
-            print("  - Quota/tokens exhausted")
-            print("  - Network error")
-            print("Loop ended: API error")
-            sys.exit(1)
+            if not had_work:
+                print("\nAll tasks complete — nothing left to build.")
+                break
 
-        after_hash = get_files_hash()
-        show_file_diff(before_hash, after_hash)
+            if iteration >= max_iterations:
+                print(f"\nMax iterations ({max_iterations}) reached.")
+                break
 
-        result = extract_text(objects)
-
-        if "[STOP]" in result:
-            print("\nLoop ended: all work complete")
-            break
-        elif "[PROGRESS]" in result:
-            print("\nProgress made, continuing to next iteration...")
-        else:
-            print(f"\n{YELLOW}WARNING: No [PROGRESS] or [STOP] marker in response.{RESET}")
-            print("The LLM may not have been able to do any work.")
-            print("Loop ended: no progress")
-            break
-
-        if iteration >= max_iterations:
-            print(f"\nLoop ended: max iterations ({max_iterations}) reached")
-            break
-
-        time.sleep(2)
-except KeyboardInterrupt:
-    print("\n\nSee ya!")
-finally:
-    total = int((datetime.now() - loop_start).total_seconds())
-    print(f"\nTotal elapsed: {total // 60}m {total % 60}s")
-    _mem_summary()
+            time.sleep(2)
+    except KeyboardInterrupt:
+        print("\n\nSee ya!")
+    finally:
+        total = int((datetime.now() - loop_start).total_seconds())
+        print(f"\nTotal elapsed: {total // 60}m {total % 60}s")
+        _mem_summary()
+    sys.exit(0)
