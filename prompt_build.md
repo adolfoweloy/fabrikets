@@ -25,12 +25,13 @@ You MUST print status markers as you work so progress is visible:
 ## Step 1: Find the Next Task
 
 Read `specs/specs.yaml` to get all specs. For each spec (in order), check if
-`specs/<domain>/<feature>/implementation_plan.md` exists and has a task with `status: todo`.
+`specs/<domain>/<feature>/implementation_plan.md` exists, has top-level `status: done` (meaning the plan passed validation), and has a task with `status: todo`.
 
 - If a spec has no `implementation_plan.md`, **skip it** — creating plans is not your job (that is plan mode's job).
-- **If no todo task exists across all specs**, output `[STOP]` and stop here. There is nothing left to do.
+- If a spec's `implementation_plan.md` has a top-level status other than `done`, **skip it** — the plan is still being researched or validated.
+- **If no todo task exists across all specs with done plans**, output `[STOP]` and stop here. There is nothing left to do.
 
-Otherwise, pick the **highest priority** todo task across all specs. Priority order: `high` > `medium` > `low`. If multiple tasks share the same priority, pick the first one found. Tasks without a priority field are treated as `medium`.
+Otherwise, pick the **highest priority** todo task across all specs with done plans. Priority order: `high` > `medium` > `low`. If multiple tasks share the same priority, pick the first one found. Tasks without a priority field are treated as `medium`.
 
 Read the README and key source files to understand the project's current state.
 
@@ -39,7 +40,7 @@ Print: `[TASK] <domain>/<feature>: task description`
 ## Step 2: Load Context
 
 For the chosen task, always read:
-- `specs/<domain>/<feature>/design.md` — data model, interfaces, component design
+- `specs/<domain>/<feature>/research.md` — codebase research: files, patterns, interfaces, conventions
 - `specs/architecture.md` — global architecture decisions
 
 Then read any additional files listed in the task's `refs` field that aren't already covered above.

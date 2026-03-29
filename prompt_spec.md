@@ -79,19 +79,15 @@ writing the spec.
 
 ## Step 3: Write the Spec Files
 
-Write three files to `<spec_dir>/`:
+Write two files to `<spec_dir>/`:
 
 ### `<spec_dir>/overview.md`
 
 A concise 1-page summary of the feature. Must include:
 - Purpose and scope (2-3 sentences)
-- Key design decisions made
+- Key design decisions and tradeoffs
 - Non-goals (what this explicitly does NOT do)
-- References to the other files:
-  ```
-  - Requirements: [requirements.md](requirements.md)
-  - Design: [design.md](design.md)
-  ```
+- Reference to requirements: `- Requirements: [requirements.md](requirements.md)`
 
 Keep this under ~100 lines. This file is always loaded — keep it tight.
 
@@ -118,24 +114,6 @@ All functional and non-functional requirements. Structure as:
 ```
 
 Be specific and testable. No prose — bullet points and tables only.
-
-### `<spec_dir>/design.md`
-
-Design decisions, data model, interfaces, and component interactions:
-
-```markdown
-## Data Model
-<types, schemas, or database tables>
-
-## Interfaces
-<API contracts, function signatures, message formats>
-
-## Component Design
-<how this fits into the existing architecture, key components, sequence flows>
-
-## Key Decisions
-<decisions made and why, with alternatives considered>
-```
 
 ## Step 4: Update Global Architecture
 

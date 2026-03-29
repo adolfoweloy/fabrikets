@@ -13,6 +13,8 @@ from datetime import datetime
 CYAN = "\033[36m"
 YELLOW = "\033[33m"
 RED = "\033[31m"
+PINK = "\033[38;5;213m"
+GREEN = "\033[32m"
 RESET = "\033[0m"
 BOLD = "\033[1m"
 ITALIC = "\033[3m"
@@ -105,10 +107,27 @@ CONFIG_FILE = "config.yaml"
 DEFAULT_MODELS = {
     "spec": "claude-sonnet-4-6",
     "plan": "claude-opus-4-6",
+    "plan_validation": "claude-haiku-4-5-20251001",
     "build": "claude-sonnet-4-6",
     "bug": "claude-sonnet-4-6",
     "skills": "claude-haiku-4-5-20251001",
     "readme": "claude-haiku-4-5-20251001",
+}
+
+DEFAULT_PLAN_CONFIG = {
+    "max_reflections": 3,
+}
+
+TIER_THRESHOLDS = {
+    "light": 85,
+    "medium": 90,
+    "heavy": 92,
+}
+
+TIER_AGENTS = {
+    "light": ["file_mapping"],
+    "medium": ["file_mapping", "pattern_analysis"],
+    "heavy": ["file_mapping", "pattern_analysis", "dependency_analysis", "test_analysis"],
 }
 
 # Parse arguments
@@ -182,8 +201,8 @@ print_logo()
 
 
 def load_config() -> dict:
-    """Returns {"projects": {...}, "models": {...}}"""
-    config = {"projects": {}, "models": {}}
+    """Returns {"projects": {...}, "models": {...}, "plan": {...}}"""
+    config = {"projects": {}, "models": {}, "plan": {}}
     current_section = None
     with open(CONFIG_FILE) as f:
         for line in f:
@@ -200,6 +219,13 @@ def load_config() -> dict:
                     config["projects"][key.strip()] = os.path.expanduser(val)
                 elif current_section == "models":
                     config["models"][key.strip()] = val
+                elif current_section == "plan":
+                    # Convert numeric values
+                    try:
+                        val = int(val)
+                    except (ValueError, TypeError):
+                        pass
+                    config["plan"][key.strip()] = val
             else:
                 current_section = None
     return config
@@ -214,6 +240,10 @@ def save_config(config: dict) -> None:
             f.write("\nmodels:\n")
             for mode_name, model_id in config["models"].items():
                 f.write(f"  {mode_name}: {model_id}\n")
+        if config.get("plan"):
+            f.write("\nplan:\n")
+            for key, val in config["plan"].items():
+                f.write(f"  {key}: {val}\n")
 
 
 def ask_choice(question: str, options: list) -> int:
@@ -622,6 +652,340 @@ def show_file_diff(before: str, after: str) -> None:
         print("No files modified")
 
 
+def run_claude_quiet(prompt: str, model: str = None) -> tuple:
+    """Run Claude without printing output. Returns (objects, text)."""
+    src_abs = os.path.abspath(src)
+    context = f"<!-- fabrikets_src: {src_abs} -->\n<!-- Your working directory is the project src directory. All file paths are relative to here. -->\n\n"
+    cmd = ["claude", "--dangerously-skip-permissions", "--output-format", "stream-json", "--print", "--verbose"]
+    if model:
+        cmd += ["--model", model]
+    proc = subprocess.Popen(
+        cmd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        cwd=src_abs,
+    )
+    proc.stdin.write(context + prompt)
+    proc.stdin.close()
+
+    objects = []
+    for line in proc.stdout:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        objects.append(obj)
+
+    proc.wait()
+    if proc.returncode != 0 and not objects:
+        raise RuntimeError(f"Claude CLI exited with code {proc.returncode}")
+    text = extract_text(objects)
+    return objects, text
+
+
+def extract_json_block(text: str) -> dict | None:
+    """Extract a JSON block from markdown-formatted text (```json ... ```)."""
+    match = re.search(r"```json\s*\n(.*?)\n```", text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(1))
+        except json.JSONDecodeError:
+            return None
+    # Try parsing the whole text as JSON
+    try:
+        return json.loads(text.strip())
+    except json.JSONDecodeError:
+        return None
+
+
+def read_file_safe(path: str) -> str:
+    """Read a file, return empty string if it doesn't exist."""
+    try:
+        with open(path) as f:
+            return f.read()
+    except (FileNotFoundError, OSError):
+        return ""
+
+
+def run_plan():
+    """Orchestrate the full plan lifecycle: assess → research → plan → validate → reflect."""
+    import concurrent.futures
+
+    config = load_config() if os.path.exists(CONFIG_FILE) else {"projects": {}, "models": {}, "plan": {}}
+    config_models = config.get("models", {})
+    plan_config = config.get("plan", {})
+    max_reflections = plan_config.get("max_reflections", DEFAULT_PLAN_CONFIG["max_reflections"])
+
+    plan_model = config_models.get("plan") or DEFAULT_MODELS["plan"]
+    validation_model = config_models.get("plan_validation") or DEFAULT_MODELS["plan_validation"]
+
+    fabrikets_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # === Phase 1: Assessment ===
+    print(f"\n{BOLD}Phase 1: Assessment{RESET} — picking spec and evaluating complexity\n")
+    print(f"{CLAUDE_HEADER}\n")
+
+    assess_prompt = open(os.path.join(fabrikets_dir, "prompt_plan_assess.md")).read()
+    objects = run_claude(assess_prompt, debug=debug, model=plan_model)
+    append_cost(objects, spec="plan/assess")
+    assess_text = extract_text(objects)
+    print()
+
+    assessment = extract_json_block(assess_text)
+    if not assessment:
+        print(f"{RED}ERROR: Could not parse assessment output as JSON.{RESET}")
+        print("Raw output:")
+        print(assess_text[-500:])
+        sys.exit(1)
+
+    if assessment.get("action") == "stop":
+        print("\nAll specs are fully planned. Nothing to do.")
+        return
+
+    spec_id = assessment["spec_id"]
+    domain = assessment["domain"]
+    feature = assessment["feature"]
+    spec_dir = assessment["spec_dir"]
+    tier = assessment.get("tier", "medium")
+    spec_dir_abs = os.path.join(src, spec_dir)
+
+    print(f"  Spec: {BOLD}{domain}/{feature}{RESET}")
+    print(f"  Tier: {BOLD}{tier}{RESET} — {assessment.get('rationale', '')}")
+
+    # Create implementation_plan.md with initial status
+    plan_file = os.path.join(spec_dir_abs, "implementation_plan.md")
+    if not os.path.exists(plan_file):
+        os.makedirs(spec_dir_abs, exist_ok=True)
+        with open(plan_file, "w") as f:
+            f.write(f"id: {spec_id}\noverview: pending\nstatus: wip\n")
+
+    # Update status to research
+    _update_plan_status(plan_file, "research")
+
+    # === Phase 2: Research ===
+    agents_to_run = TIER_AGENTS.get(tier, TIER_AGENTS["medium"])
+    print(f"\n{BOLD}Phase 2: Research{RESET} — {len(agents_to_run)} agent(s): {', '.join(agents_to_run)}\n")
+
+    research_template = open(os.path.join(fabrikets_dir, "prompt_plan_research.md")).read()
+    research_focus = assessment.get("research_focus", {})
+    key_dirs = assessment.get("key_directories", [])
+    req_summary = assessment.get("key_requirements_summary", "")
+
+    def run_research_agent(agent_name):
+        focus_desc = research_focus.get(agent_name, f"Perform {agent_name} for this spec")
+        agent_prompt = research_template.format(
+            focus_area=f"Your focus: **{agent_name}**\n\n{focus_desc}",
+            spec_id=spec_id,
+            domain=domain,
+            feature=feature,
+            spec_dir=spec_dir,
+            tier=tier,
+            requirements_summary=req_summary,
+            key_directories=", ".join(key_dirs),
+        )
+        objs, text = run_claude_quiet(agent_prompt, model=plan_model)
+        append_cost(objs, spec=f"{domain}/{feature}")
+        return agent_name, text
+
+    research_results = {}
+    spinner = Spinner()
+    spinner.start()
+    try:
+        if len(agents_to_run) == 1:
+            name, text = run_research_agent(agents_to_run[0])
+            research_results[name] = text
+        else:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+                futures = {executor.submit(run_research_agent, name): name for name in agents_to_run}
+                for future in concurrent.futures.as_completed(futures):
+                    agent_name = futures[future]
+                    try:
+                        name, text = future.result()
+                        if not text.strip():
+                            print(f"\r{YELLOW}  WARNING: {name} returned empty research{RESET}")
+                        research_results[name] = text
+                    except Exception as e:
+                        print(f"\r{RED}  ERROR: {agent_name} failed: {e}{RESET}")
+    finally:
+        spinner.stop()
+
+    # Combine research results into research.md
+    research_md = f"# Research: {domain}/{feature}\n\n"
+    research_md += f"**Tier**: {tier}\n"
+    research_md += f"**Generated**: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
+    for agent_name in agents_to_run:
+        if agent_name in research_results:
+            research_md += f"---\n\n# {agent_name.replace('_', ' ').title()}\n\n"
+            research_md += research_results[agent_name] + "\n\n"
+
+    research_file = os.path.join(spec_dir_abs, "research.md")
+    with open(research_file, "w") as f:
+        f.write(research_md)
+
+    print(f"  Research saved to {spec_dir}/research.md")
+    for name in agents_to_run:
+        status = f"{GREEN}done{RESET}" if name in research_results else f"{RED}failed{RESET}"
+        print(f"    {name}: {status}")
+
+    # === Phase 3: Planning ===
+    _update_plan_status(plan_file, "planning")
+    print(f"\n{BOLD}Phase 3: Planning{RESET} — generating implementation tasks\n")
+    print(f"{CLAUDE_HEADER}\n")
+
+    plan_template = open(os.path.join(fabrikets_dir, "prompt_plan.md")).read()
+    plan_prompt = plan_template.format(
+        spec_dir=spec_dir,
+        spec_id=spec_id,
+    )
+    objects = run_claude(plan_prompt, debug=debug, model=plan_model)
+    append_cost(objects, spec=f"{domain}/{feature}")
+    print()
+
+    # === Phase 4: Validation Loop ===
+    threshold = TIER_THRESHOLDS.get(tier, 90)
+    print(f"\n{BOLD}Phase 4: Validation{RESET} — scoring plan (threshold: {threshold}%)\n")
+
+    for reflection_round in range(max_reflections + 1):
+        _update_plan_status(plan_file, "validation")
+
+        # Read current state for validation
+        overview_content = read_file_safe(os.path.join(spec_dir_abs, "overview.md"))
+        requirements_content = read_file_safe(os.path.join(spec_dir_abs, "requirements.md"))
+        research_content = read_file_safe(research_file)
+        plan_content = read_file_safe(plan_file)
+
+        validate_template = open(os.path.join(fabrikets_dir, "prompt_plan_validate.md")).read()
+        validate_prompt = validate_template.format(
+            overview=overview_content,
+            requirements=requirements_content,
+            research=research_content,
+            plan=plan_content,
+        )
+
+        print(f"  Scoring with {validation_model}...")
+        val_objects, val_text = run_claude_quiet(validate_prompt, model=validation_model)
+        append_cost(val_objects, spec=f"{domain}/{feature}")
+
+        scores = extract_json_block(val_text)
+        if not scores:
+            print(f"{YELLOW}  WARNING: Could not parse validation scores. Proceeding anyway.{RESET}")
+            _update_plan_status(plan_file, "done")
+            break
+
+        total_pct = scores.get("total_percent", 0)
+        print(f"\n  {BOLD}Score: {total_pct}%{RESET} (threshold: {threshold}%)\n")
+
+        # Print individual scores
+        for criterion, data in scores.get("scores", {}).items():
+            score = data.get("score", 0)
+            max_score = data.get("max", 10)
+            issues = data.get("issues", [])
+            color = GREEN if score >= 8 else YELLOW if score >= 6 else RED
+            label = criterion.replace("_", " ").title()
+            print(f"    {color}{score}/{max_score}{RESET}  {label}")
+            for issue in issues[:2]:  # Show max 2 issues per criterion
+                print(f"          {DIM}{issue}{RESET}")
+
+        summary = scores.get("summary", "")
+        if summary:
+            print(f"\n  {DIM}{summary}{RESET}")
+
+        if total_pct >= threshold:
+            print(f"\n  {GREEN}Plan passed validation.{RESET}")
+            _update_plan_status(plan_file, "done")
+            break
+
+        # Need reflection
+        if reflection_round >= max_reflections:
+            # Max reflections reached — generate anyway with pink warning
+            print(f"\n{PINK}{BOLD}  WARNING: Plan for {domain}/{feature} did not reach quality threshold")
+            print(f"  after {max_reflections} reflection(s) (scored {total_pct}%, needed {threshold}%).")
+            print(f"  Review {spec_dir}/implementation_plan.md before building.{RESET}")
+            _update_plan_status(plan_file, "done")
+            break
+
+        # Reflection
+        _update_plan_status(plan_file, "reflection")
+        print(f"\n  {BOLD}Reflecting{RESET} (round {reflection_round + 1}/{max_reflections})...\n")
+        print(f"{CLAUDE_HEADER}\n")
+
+        # Format scores for the reflection prompt
+        scores_text = json.dumps(scores, indent=2)
+        reflect_template = open(os.path.join(fabrikets_dir, "prompt_plan_reflect.md")).read()
+        reflect_prompt = reflect_template.format(
+            spec_dir=spec_dir,
+            reflection_round=reflection_round + 1,
+            max_reflections=max_reflections,
+            validation_scores=scores_text,
+        )
+        objects = run_claude(reflect_prompt, debug=debug, model=plan_model)
+        append_cost(objects, spec=f"{domain}/{feature}")
+        print()
+
+    # Update specs.yaml status
+    specs_yaml = os.path.join(src, "specs", "specs.yaml")
+    if os.path.exists(specs_yaml):
+        content = read_file_safe(specs_yaml)
+        # Simple replacement: find this spec's status and set to wip
+        # This is a basic approach — the spec status goes to wip when plan is done
+        updated = re.sub(
+            rf"(- id: {re.escape(spec_id)}\n(?:    \w+:.*\n)*?    status:) \w+",
+            rf"\1 wip",
+            content,
+        )
+        if updated != content:
+            with open(specs_yaml, "w") as f:
+                f.write(updated)
+
+    # Final commit
+    subprocess.run(
+        ["git", "add", "specs/"],
+        cwd=os.path.abspath(src),
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", f"plan: {domain}/{feature} - research + validated plan"],
+        cwd=os.path.abspath(src),
+        capture_output=True,
+    )
+
+    print(f"\n{GREEN}{BOLD}Plan complete for {domain}/{feature}.{RESET}")
+
+
+def _update_plan_status(plan_file: str, new_status: str):
+    """Update the top-level status field in an implementation_plan.md file.
+
+    Only matches 'status:' lines that are not indented (top-level YAML keys),
+    avoiding task-level status fields which are indented.
+    """
+    content = read_file_safe(plan_file)
+    if not content:
+        return
+    # Match only non-indented status lines (top-level YAML)
+    updated = re.sub(r"^status: \S+", f"status: {new_status}", content, count=1, flags=re.MULTILINE)
+    if updated != content:
+        with open(plan_file, "w") as f:
+            f.write(updated)
+
+
+# Plan mode: full orchestrated lifecycle (assess → research → plan → validate → reflect)
+if mode == "plan":
+    print(f"Running in plan mode (RPI: research → plan → validate)\n")
+    plan_start = datetime.now()
+    try:
+        run_plan()
+    except KeyboardInterrupt:
+        print("\n\nSee ya!")
+    finally:
+        total = int((datetime.now() - plan_start).total_seconds())
+        print(f"\nTotal elapsed: {total // 60}m {total % 60}s")
+    sys.exit(0)
+
 # Skills mode: discover project tooling and create Claude Code skills
 if mode == "skills":
     os.makedirs(os.path.join(src, ".claude", "commands"), exist_ok=True)
@@ -776,9 +1140,9 @@ if mode == "spec":
 
     spec_dir = os.path.join(specs_dir, domain, feature)
     os.makedirs(spec_dir, exist_ok=True)
-    interview_file = os.path.join(spec_dir, "_interview.md")
+    interview_file = os.path.join(spec_dir, "_active_interview.md")
 
-    if os.path.exists(interview_file):
+    if os.path.exists(os.path.join(spec_dir, "overview.md")):
         confirm = ask(f"Spec already exists at {domain}/{feature}. Override? (y/n): ").strip().lower()
         if confirm != "y":
             print("Aborted.")
@@ -838,7 +1202,10 @@ if mode == "spec":
             print(f"{color}Context: {context_tokens:,} / {CONTEXT_WINDOW:,} tokens ({pct:.1f}%){RESET}\n")
 
             if "[DONE]" in response:
-                print(f"Interview complete. Spec saved to {interview_file}")
+                print(f"Interview complete. Spec saved to {spec_dir_rel}/")
+                # Clean up temporary interview file
+                if os.path.exists(interview_file):
+                    os.unlink(interview_file)
                 break
 
             if "[ARCHITECT]" in response:
@@ -876,7 +1243,7 @@ try:
         print("Sending prompt to Claude...")
         print("\n--- Claude's response ---")
         objects = run_claude(prompt, debug=debug, model=claude_model)
-        elapsed = (datetime.now() - iter_start).seconds
+        elapsed = int((datetime.now() - iter_start).total_seconds())
         print(f"\n--- End response --- ({elapsed // 60}m {elapsed % 60}s)\n")
 
         append_cost(objects)
@@ -915,5 +1282,5 @@ try:
 except KeyboardInterrupt:
     print("\n\nSee ya!")
 finally:
-    total = (datetime.now() - loop_start).seconds
+    total = int((datetime.now() - loop_start).total_seconds())
     print(f"\nTotal elapsed: {total // 60}m {total % 60}s")
