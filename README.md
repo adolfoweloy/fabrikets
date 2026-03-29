@@ -2,6 +2,8 @@
 
 An AI-driven development loop. Define specs, report bugs, plan tasks, build — each stage driven by Claude.
 
+> **Warning**: This project runs Claude Code with `--dangerously-skip-permissions`, which means the AI agent can read, write, and execute commands in your project directory without asking for confirmation. It is scoped to the registered project's source directory, but there are no guardrails preventing unintended actions. **Run this in a sandboxed environment** (container, VM, or similar) unless you fully understand what it does and accept the risk. Use at your own risk.
+
 ## Prerequisites
 
 - Python 3.12+
