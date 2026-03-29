@@ -8,7 +8,56 @@ import json
 import subprocess
 import threading
 import time
+import resource
+import tracemalloc
 from datetime import datetime
+
+# Memory monitoring (enabled via RALPH_MEMORY_DEBUG=1)
+_MEM_DEBUG = os.environ.get("RALPH_MEMORY_DEBUG") == "1"
+_mem_log = []
+_mem_start_time = None
+
+
+def _mem_rss() -> int:
+    """Current RSS in KB (Linux ru_maxrss is in KB)."""
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+
+
+def _mem_checkpoint(label: str) -> None:
+    if not _MEM_DEBUG:
+        return
+    global _mem_start_time
+    if _mem_start_time is None:
+        _mem_start_time = time.monotonic()
+    elapsed = time.monotonic() - _mem_start_time
+    rss = _mem_rss()
+    _mem_log.append((label, rss, elapsed))
+    print(f"[MEM] {elapsed:6.1f}s  {rss:8d} KB  {label}", flush=True)
+
+
+def _mem_snapshot(label: str, top_n: int = 5) -> None:
+    if not _MEM_DEBUG or not tracemalloc.is_tracing():
+        return
+    snapshot = tracemalloc.take_snapshot()
+    stats = snapshot.statistics("lineno")
+    print(f"[MEM ALLOC] Top {top_n} at: {label}")
+    for stat in stats[:top_n]:
+        print(f"  {stat}")
+
+
+def _mem_summary() -> None:
+    if not _MEM_DEBUG or not _mem_log:
+        return
+    peak_rss = max(rss for _, rss, _ in _mem_log)
+    print("\n[MEM SUMMARY] " + "\u2500" * 50)
+    print(f"  {'Checkpoint':<50}  {'RSS (KB)':>10}  {'Time':>8}")
+    print(f"  {'-'*50}  {'-'*10}  {'-'*8}")
+    for label, rss, elapsed in _mem_log:
+        marker = " <-- PEAK" if rss == peak_rss else ""
+        print(f"  {label:<50}  {rss:>10}  {elapsed:>6.1f}s{marker}")
+    print(f"\n  Peak: {peak_rss:,} KB ({peak_rss/1024:.1f} MB)")
+    print("[MEM SUMMARY] " + "\u2500" * 50 + "\n")
+
 
 CYAN = "\033[36m"
 YELLOW = "\033[33m"
@@ -129,6 +178,11 @@ TIER_AGENTS = {
     "medium": ["file_mapping", "pattern_analysis"],
     "heavy": ["file_mapping", "pattern_analysis", "dependency_analysis", "test_analysis"],
 }
+
+# Start memory tracing if enabled
+if _MEM_DEBUG:
+    tracemalloc.start()
+    _mem_checkpoint("startup")
 
 # Parse arguments
 mode = "spec"
@@ -539,6 +593,7 @@ def run_claude(prompt: str, debug: bool = False, model: str = None) -> list:
     proc.stdin.write(context + prompt)
     proc.stdin.close()
 
+    _mem_checkpoint(f"run_claude:start prompt={len(prompt)}chars")
     spinner = Spinner()
     spinner.start()
 
@@ -592,6 +647,8 @@ def run_claude(prompt: str, debug: bool = False, model: str = None) -> list:
 
     spinner.stop()
     proc.wait()
+    _mem_checkpoint(f"run_claude:end objects={len(objects)}")
+    _mem_snapshot("run_claude:end")
     return objects
 
 
@@ -670,6 +727,7 @@ def run_claude_quiet(prompt: str, model: str = None) -> tuple:
     proc.stdin.write(context + prompt)
     proc.stdin.close()
 
+    _mem_checkpoint(f"run_claude_quiet:start prompt={len(prompt)}chars")
     objects = []
     for line in proc.stdout:
         line = line.strip()
@@ -685,6 +743,7 @@ def run_claude_quiet(prompt: str, model: str = None) -> tuple:
     if proc.returncode != 0 and not objects:
         raise RuntimeError(f"Claude CLI exited with code {proc.returncode}")
     text = extract_text(objects)
+    _mem_checkpoint(f"run_claude_quiet:end objects={len(objects)}")
     return objects, text
 
 
@@ -730,10 +789,13 @@ def run_plan():
     print(f"\n{BOLD}Phase 1: Assessment{RESET} — picking spec and evaluating complexity\n")
     print(f"{CLAUDE_HEADER}\n")
 
+    _mem_checkpoint("phase1:assessment:start")
     assess_prompt = open(os.path.join(fabrikets_dir, "prompt_plan_assess.md")).read()
     objects = run_claude(assess_prompt, debug=debug, model=plan_model)
     append_cost(objects, spec="plan/assess")
     assess_text = extract_text(objects)
+    _mem_checkpoint(f"phase1:assessment:end assess_len={len(assess_text)}")
+    _mem_snapshot("phase1:assessment:end")
     print()
 
     assessment = extract_json_block(assess_text)
@@ -759,92 +821,124 @@ def run_plan():
 
     # Create implementation_plan.md with initial status
     plan_file = os.path.join(spec_dir_abs, "implementation_plan.md")
+    os.makedirs(spec_dir_abs, exist_ok=True)
     if not os.path.exists(plan_file):
-        os.makedirs(spec_dir_abs, exist_ok=True)
         with open(plan_file, "w") as f:
             f.write(f"id: {spec_id}\noverview: pending\nstatus: wip\n")
 
-    # Update status to research
-    _update_plan_status(plan_file, "research")
-
-    # === Phase 2: Research ===
-    agents_to_run = TIER_AGENTS.get(tier, TIER_AGENTS["medium"])
-    print(f"\n{BOLD}Phase 2: Research{RESET} — {len(agents_to_run)} agent(s): {', '.join(agents_to_run)}\n")
-
-    research_template = open(os.path.join(fabrikets_dir, "prompt_plan_research.md")).read()
-    research_focus = assessment.get("research_focus", {})
-    key_dirs = assessment.get("key_directories", [])
-    req_summary = assessment.get("key_requirements_summary", "")
-
-    def run_research_agent(agent_name):
-        focus_desc = research_focus.get(agent_name, f"Perform {agent_name} for this spec")
-        agent_prompt = research_template.format(
-            focus_area=f"Your focus: **{agent_name}**\n\n{focus_desc}",
-            spec_id=spec_id,
-            domain=domain,
-            feature=feature,
-            spec_dir=spec_dir,
-            tier=tier,
-            requirements_summary=req_summary,
-            key_directories=", ".join(key_dirs),
-        )
-        objs, text = run_claude_quiet(agent_prompt, model=plan_model)
-        append_cost(objs, spec=f"{domain}/{feature}")
-        return agent_name, text
-
-    research_results = {}
-    spinner = Spinner()
-    spinner.start()
-    try:
-        if len(agents_to_run) == 1:
-            name, text = run_research_agent(agents_to_run[0])
-            research_results[name] = text
-        else:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-                futures = {executor.submit(run_research_agent, name): name for name in agents_to_run}
-                for future in concurrent.futures.as_completed(futures):
-                    agent_name = futures[future]
-                    try:
-                        name, text = future.result()
-                        if not text.strip():
-                            print(f"\r{YELLOW}  WARNING: {name} returned empty research{RESET}")
-                        research_results[name] = text
-                    except Exception as e:
-                        print(f"\r{RED}  ERROR: {agent_name} failed: {e}{RESET}")
-    finally:
-        spinner.stop()
-
-    # Combine research results into research.md
-    research_md = f"# Research: {domain}/{feature}\n\n"
-    research_md += f"**Tier**: {tier}\n"
-    research_md += f"**Generated**: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
-    for agent_name in agents_to_run:
-        if agent_name in research_results:
-            research_md += f"---\n\n# {agent_name.replace('_', ' ').title()}\n\n"
-            research_md += research_results[agent_name] + "\n\n"
+    # Check current status to determine resume point
+    current_status = "wip"
+    plan_content_check = read_file_safe(plan_file)
+    m = re.search(r"^status: (\S+)", plan_content_check, re.MULTILINE)
+    if m:
+        current_status = m.group(1)
 
     research_file = os.path.join(spec_dir_abs, "research.md")
-    with open(research_file, "w") as f:
-        f.write(research_md)
 
-    print(f"  Research saved to {spec_dir}/research.md")
-    for name in agents_to_run:
-        status = f"{GREEN}done{RESET}" if name in research_results else f"{RED}failed{RESET}"
-        print(f"    {name}: {status}")
+    # Resume logic: skip phases that already completed
+    # wip/research → start from research
+    # planning     → research done, skip to planning
+    # validation/reflection → research + planning done, skip to validation
+    skip_research = current_status in ("planning", "validation", "reflection")
+    skip_planning = current_status in ("validation", "reflection")
+
+    if skip_research:
+        print(f"  {DIM}Resuming from phase {'3 (planning)' if not skip_planning else '4 (validation)'} — previous status: {current_status}{RESET}")
+
+    # === Phase 2: Research ===
+    _mem_checkpoint("phase2:research:start")
+    agents_to_run = TIER_AGENTS.get(tier, TIER_AGENTS["medium"])
+
+    if skip_research:
+        print(f"\n{BOLD}Phase 2: Research{RESET} — {DIM}skipped (already complete){RESET}")
+    else:
+        _update_plan_status(plan_file, "research")
+        print(f"\n{BOLD}Phase 2: Research{RESET} — {len(agents_to_run)} agent(s): {', '.join(agents_to_run)}\n")
+
+        research_template = open(os.path.join(fabrikets_dir, "prompt_plan_research.md")).read()
+        research_focus = assessment.get("research_focus", {})
+        key_dirs = assessment.get("key_directories", [])
+        req_summary = assessment.get("key_requirements_summary", "")
+
+        def run_research_agent(agent_name):
+            focus_desc = research_focus.get(agent_name, f"Perform {agent_name} for this spec")
+            agent_prompt = research_template.format(
+                focus_area=f"Your focus: **{agent_name}**\n\n{focus_desc}",
+                spec_id=spec_id,
+                domain=domain,
+                feature=feature,
+                spec_dir=spec_dir,
+                tier=tier,
+                requirements_summary=req_summary,
+                key_directories=", ".join(key_dirs),
+            )
+            _mem_checkpoint(f"phase2:agent:{agent_name}:start")
+            objs, text = run_claude_quiet(agent_prompt, model=plan_model)
+            append_cost(objs, spec=f"{domain}/{feature}")
+            _mem_checkpoint(f"phase2:agent:{agent_name}:end text_len={len(text)}")
+            return agent_name, text
+
+        research_results = {}
+        spinner = Spinner()
+        spinner.start()
+        try:
+            if len(agents_to_run) == 1:
+                name, text = run_research_agent(agents_to_run[0])
+                research_results[name] = text
+            else:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+                    futures = {executor.submit(run_research_agent, name): name for name in agents_to_run}
+                    for future in concurrent.futures.as_completed(futures):
+                        agent_name = futures[future]
+                        try:
+                            name, text = future.result()
+                            if not text.strip():
+                                print(f"\r{YELLOW}  WARNING: {name} returned empty research{RESET}")
+                            research_results[name] = text
+                        except Exception as e:
+                            print(f"\r{RED}  ERROR: {agent_name} failed: {e}{RESET}")
+        finally:
+            spinner.stop()
+            _mem_checkpoint(f"phase2:research:complete results={len(research_results)}")
+            _mem_snapshot("phase2:research:complete")
+
+        # Combine research results into research.md
+        research_md = f"# Research: {domain}/{feature}\n\n"
+        research_md += f"**Tier**: {tier}\n"
+        research_md += f"**Generated**: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
+        for agent_name in agents_to_run:
+            if agent_name in research_results:
+                research_md += f"---\n\n# {agent_name.replace('_', ' ').title()}\n\n"
+                research_md += research_results[agent_name] + "\n\n"
+
+        with open(research_file, "w") as f:
+            f.write(research_md)
+        _mem_checkpoint(f"phase2:research:written md_len={len(research_md)}")
+
+        print(f"  Research saved to {spec_dir}/research.md")
+        for name in agents_to_run:
+            status = f"{GREEN}done{RESET}" if name in research_results else f"{RED}failed{RESET}"
+            print(f"    {name}: {status}")
 
     # === Phase 3: Planning ===
-    _update_plan_status(plan_file, "planning")
-    print(f"\n{BOLD}Phase 3: Planning{RESET} — generating implementation tasks\n")
-    print(f"{CLAUDE_HEADER}\n")
+    if skip_planning:
+        print(f"\n{BOLD}Phase 3: Planning{RESET} — {DIM}skipped (already complete){RESET}")
+    else:
+        _update_plan_status(plan_file, "planning")
+        print(f"\n{BOLD}Phase 3: Planning{RESET} — generating implementation tasks\n")
+        print(f"{CLAUDE_HEADER}\n")
 
-    plan_template = open(os.path.join(fabrikets_dir, "prompt_plan.md")).read()
-    plan_prompt = plan_template.format(
-        spec_dir=spec_dir,
-        spec_id=spec_id,
-    )
-    objects = run_claude(plan_prompt, debug=debug, model=plan_model)
-    append_cost(objects, spec=f"{domain}/{feature}")
-    print()
+        _mem_checkpoint("phase3:planning:start")
+        plan_template = open(os.path.join(fabrikets_dir, "prompt_plan.md")).read()
+        plan_prompt = plan_template.format(
+            spec_dir=spec_dir,
+            spec_id=spec_id,
+        )
+        objects = run_claude(plan_prompt, debug=debug, model=plan_model)
+        append_cost(objects, spec=f"{domain}/{feature}")
+        _mem_checkpoint(f"phase3:planning:end objects={len(objects)}")
+        _mem_snapshot("phase3:planning:end")
+        print()
 
     # === Phase 4: Validation Loop ===
     threshold = TIER_THRESHOLDS.get(tier, 90)
@@ -852,12 +946,14 @@ def run_plan():
 
     for reflection_round in range(max_reflections + 1):
         _update_plan_status(plan_file, "validation")
+        _mem_checkpoint(f"phase4:validation:round={reflection_round}:start")
 
         # Read current state for validation
         overview_content = read_file_safe(os.path.join(spec_dir_abs, "overview.md"))
         requirements_content = read_file_safe(os.path.join(spec_dir_abs, "requirements.md"))
         research_content = read_file_safe(research_file)
         plan_content = read_file_safe(plan_file)
+        _mem_checkpoint(f"phase4:validation:files_read overview={len(overview_content)} req={len(requirements_content)} research={len(research_content)} plan={len(plan_content)}")
 
         validate_template = open(os.path.join(fabrikets_dir, "prompt_plan_validate.md")).read()
         validate_prompt = (validate_template
@@ -925,6 +1021,8 @@ def run_plan():
         )
         objects = run_claude(reflect_prompt, debug=debug, model=plan_model)
         append_cost(objects, spec=f"{domain}/{feature}")
+        _mem_checkpoint(f"phase4:reflection:round={reflection_round + 1}:end objects={len(objects)}")
+        _mem_snapshot(f"phase4:reflection:round={reflection_round + 1}:end")
         print()
 
     # Update specs.yaml status
@@ -984,6 +1082,7 @@ if mode == "plan":
     finally:
         total = int((datetime.now() - plan_start).total_seconds())
         print(f"\nTotal elapsed: {total // 60}m {total % 60}s")
+        _mem_summary()
     sys.exit(0)
 
 # Skills mode: discover project tooling and create Claude Code skills
@@ -1238,6 +1337,7 @@ try:
     for iteration in range(1, max_iterations + 1):
         iter_start = datetime.now()
         print(f"\n=== Iteration {iteration}/{max_iterations} starting at {iter_start.strftime('%c')} ===")
+        _mem_checkpoint(f"build:iteration={iteration}:start")
         before_hash = get_files_hash()
 
         print("Sending prompt to Claude...")
@@ -1245,6 +1345,8 @@ try:
         objects = run_claude(prompt, debug=debug, model=claude_model)
         elapsed = int((datetime.now() - iter_start).total_seconds())
         print(f"\n--- End response --- ({elapsed // 60}m {elapsed % 60}s)\n")
+        _mem_checkpoint(f"build:iteration={iteration}:end objects={len(objects)}")
+        _mem_snapshot(f"build:iteration={iteration}:end")
 
         append_cost(objects)
 
@@ -1284,3 +1386,4 @@ except KeyboardInterrupt:
 finally:
     total = int((datetime.now() - loop_start).total_seconds())
     print(f"\nTotal elapsed: {total // 60}m {total % 60}s")
+    _mem_summary()
