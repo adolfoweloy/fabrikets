@@ -59,13 +59,17 @@ projects:
 models:
   spec: claude-sonnet-4-6
   plan: claude-opus-4-6
+  plan_validation: claude-haiku-4-5-20251001
   build: claude-sonnet-4-6
   bug: claude-sonnet-4-6
   skills: claude-haiku-4-5-20251001
   readme: claude-haiku-4-5-20251001
+
+plan:
+  max_reflections: 3
 ```
 
-The defaults above are written to `config.yaml` on first bootstrap.
+The `plan` section configures the plan lifecycle. `max_reflections` controls how many times the plan is refined if it doesn't meet the quality threshold (default 3).
 
 ## Workflow
 
@@ -89,31 +93,53 @@ Each interview creates a directory under `<src>/specs/<domain>/<feature>/`:
   specs.yaml                   # registry of all specs (id, domain, feature, status)
   <domain>/
     <feature>/
-      _interview.md            # interview transcript (conversation log)
-      overview.md              # concise summary, key decisions, non-goals
+      overview.md              # concise summary, key decisions, tradeoffs, non-goals
       requirements.md          # functional and non-functional requirements
-      design.md                # data model, interfaces, component design
 ```
 
 #### Architect subagent
 
-Once Claude has gathered enough requirements, it automatically triggers an architect subagent. The architect analyses the requirements and returns a structured review covering:
+Once Claude has gathered enough requirements, it automatically triggers an architect subagent. The architect performs a requirements-level review covering:
 
 - **Tradeoffs** — design tensions implied by the requirements
-- **Risks** — unclear requirements, scalability cliffs, security concerns, operational issues
+- **Risks** — unclear or contradictory requirements, scope creep, security concerns
+- **Missing non-functional requirements** — performance, scalability, security, reliability, observability gaps
 - **Open questions** — specific gaps to resolve before writing the spec
 
-The architect's findings are fed back into the interview so Claude can address them before finalising the spec.
+The architect's findings are fed back into the interview so Claude can address them before finalising the spec. Note: the architect does not analyse the codebase — that happens during the research phase of `plan`.
 
-### 2. `plan` — break it into tasks
+### 2. `plan` — research, plan, validate
 
 ```bash
 uv run ralph.py -p my-app plan
 ```
 
-Reads `specs/architecture.md` and all spec files, then creates `specs/<domain>/<feature>/implementation_plan.md` for each spec. Each task gets a priority (`high`, `medium`, `low`) based on how critical it is — core/foundational work is high, features building on the core are medium, polish and edge cases are low. Also updates `design.md` with any implementation decisions made during planning. Commits after each spec is planned.
+Runs a multi-phase lifecycle for one spec at a time:
 
-Plan mode uses Opus by default for deeper analysis (configurable via the `models:` section in `config.yaml`).
+1. **Assessment** — Picks the next unplanned spec and determines its complexity tier (light, medium, or heavy) based on scope, cross-domain impact, and number of requirements.
+
+2. **Research** — Spawns 1-4 parallel sub-agents (based on tier) that explore the codebase and write factual findings to `research.md`. Research agents only document what exists — file paths, patterns, interfaces, conventions — with no suggestions. Tiers control depth:
+   - **Light** (bug fixes, small changes): 1 agent — targeted file search
+   - **Medium** (new features, single domain): 2 agents — file mapping + pattern analysis
+   - **Heavy** (cross-domain, migrations, refactors): 4 agents — files + patterns + dependencies + tests
+
+3. **Planning** — In a fresh context, reads the spec files + `research.md` and generates `implementation_plan.md` with atomic tasks detailed enough for mechanical execution (exact files, function signatures, types, validation rules, test cases).
+
+4. **Validation** — Haiku scores the plan on 6 criteria (0-10 each): acceptance criteria clarity, task atomicity, requirements coverage, research grounding, dependency ordering, and verification completeness. The total score must meet a tier-based threshold (light: 85%, medium: 90%, heavy: 92%).
+
+5. **Reflection** — If the score is below threshold, Opus refines the plan targeting the lowest-scoring criteria, then re-validates. This loops up to `max_reflections` times (default 3, configurable in `config.yaml`). If the threshold is still not met, the plan is generated anyway with a warning.
+
+After planning, the spec directory contains:
+
+```
+<src>/specs/<domain>/<feature>/
+  overview.md              # from spec phase
+  requirements.md          # from spec phase
+  research.md              # codebase research findings
+  implementation_plan.md   # validated, scored, atomic tasks
+```
+
+Plan mode uses Opus for research/planning/reflection and Haiku for validation scoring (configurable via `models:` in `config.yaml`).
 
 ### 3. `build` — implement
 
@@ -121,7 +147,7 @@ Plan mode uses Opus by default for deeper analysis (configurable via the `models
 uv run ralph.py -p my-app build
 ```
 
-Scans all `implementation_plan.md` files and implements one task per iteration — picking the highest priority `todo` task first. Each iteration: loads context, writes code, validates (lint, typecheck, tests), updates the plan status, and commits. Build mode also creates Claude Code skills organically as it discovers project workflows (how to test, lint, build).
+Scans all `implementation_plan.md` files that have passed validation (`status: done`) and implements one task per iteration — picking the highest priority `todo` task first. Each iteration: loads context from `research.md` and architecture, writes code, validates (lint, typecheck, tests), updates the plan status, and commits. Build mode also creates Claude Code skills organically as it discovers project workflows (how to test, lint, build).
 
 ### 4. `bug` — document a bug
 
@@ -136,7 +162,7 @@ Before the interview starts, fabrikets asks whether Claude may run commands (tes
 
 Use `-m` to skip the editor and provide a short description inline.
 
-After documenting, run `plan` (creates `design.md` with root cause analysis + `implementation_plan.md`) and then `build` to fix it. Use `--bugs` to prioritise bug specs over features:
+After documenting, run `plan` (researches the codebase, creates `implementation_plan.md` with root cause analysis) and then `build` to fix it. Use `--bugs` to prioritise bug specs over features:
 
 ```bash
 uv run ralph.py -p my-app plan --bugs
@@ -200,32 +226,37 @@ Lists all specs for a project grouped by domain, showing feature name, descripti
 ## Project layout
 
 ```
-ralph.py              # the loop runner
-prompt_spec.md        # instructions for Claude in spec mode
-prompt_architect.md   # instructions for the architect subagent
-prompt_plan.md        # instructions for Claude in plan mode
-prompt_build.md       # instructions for Claude in build mode
-prompt_bug.md         # instructions for Claude in bug mode
-prompt_skills.md      # instructions for Claude in skills mode
-prompt_readme.md      # instructions for Claude in readme mode
-config.yaml           # project registry + model config (not git-tracked)
+ralph.py                  # the loop runner + plan orchestration
+prompt_spec.md            # instructions for Claude in spec mode
+prompt_architect.md       # instructions for the architect subagent
+prompt_plan_assess.md     # plan phase: complexity assessment
+prompt_plan_research.md   # plan phase: research sub-agent template
+prompt_plan.md            # plan phase: task generation
+prompt_plan_validate.md   # plan phase: scoring (Haiku)
+prompt_plan_reflect.md    # plan phase: reflection (Opus)
+prompt_build.md           # instructions for Claude in build mode
+prompt_bug.md             # instructions for Claude in bug mode
+prompt_skills.md          # instructions for Claude in skills mode
+prompt_readme.md          # instructions for Claude in readme mode
+config.yaml               # project registry + model + plan config (not git-tracked)
 
-<src>/                # your project source directory
+<src>/                    # your project source directory
   specs/
     architecture.md
     specs.yaml
     <domain>/<feature>/
-      _interview.md
       overview.md
       requirements.md
-      design.md
-      implementation_plan.md
+      research.md             # codebase research (generated by plan)
+      implementation_plan.md  # validated task plan (generated by plan)
     bugs/<slug>/
       overview.md
       requirements.md
+      research.md
+      implementation_plan.md
 
 .ralph/
-  costs.jsonl         # per-call cost log (project, mode, spec, tokens, cost)
+  costs.jsonl             # per-call cost log (project, mode, spec, tokens, cost)
 ```
 
 ## Claude Code integration
