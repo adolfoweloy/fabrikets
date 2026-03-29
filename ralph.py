@@ -860,11 +860,11 @@ def run_plan():
         plan_content = read_file_safe(plan_file)
 
         validate_template = open(os.path.join(fabrikets_dir, "prompt_plan_validate.md")).read()
-        validate_prompt = validate_template.format(
-            overview=overview_content,
-            requirements=requirements_content,
-            research=research_content,
-            plan=plan_content,
+        validate_prompt = (validate_template
+            .replace("{overview}", overview_content)
+            .replace("{requirements}", requirements_content)
+            .replace("{research}", research_content)
+            .replace("{plan}", plan_content)
         )
 
         print(f"  Scoring with {validation_model}...")
@@ -917,11 +917,11 @@ def run_plan():
         # Format scores for the reflection prompt
         scores_text = json.dumps(scores, indent=2)
         reflect_template = open(os.path.join(fabrikets_dir, "prompt_plan_reflect.md")).read()
-        reflect_prompt = reflect_template.format(
-            spec_dir=spec_dir,
-            reflection_round=reflection_round + 1,
-            max_reflections=max_reflections,
-            validation_scores=scores_text,
+        reflect_prompt = (reflect_template
+            .replace("{spec_dir}", spec_dir)
+            .replace("{reflection_round}", str(reflection_round + 1))
+            .replace("{max_reflections}", str(max_reflections))
+            .replace("{validation_scores}", scores_text)
         )
         objects = run_claude(reflect_prompt, debug=debug, model=plan_model)
         append_cost(objects, spec=f"{domain}/{feature}")
