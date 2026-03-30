@@ -17,9 +17,29 @@ _MEM_DEBUG = os.environ.get("RALPH_MEMORY_DEBUG") == "1"
 _mem_log = []
 _mem_start_time = None
 
+# Memray profiling (enabled via RALPH_MEMRAY=1)
+# Install: pip install memray
+# Output: ralph_profile_<timestamp>.bin  ->  memray flamegraph <file>
+_MEMRAY = os.environ.get("RALPH_MEMRAY") == "1"
+_memray_tracker = None
+if _MEMRAY:
+    try:
+        import memray  # noqa: F401
+    except ImportError:
+        print("[MEMRAY] memray not installed. Run: pip install memray", flush=True)
+        _MEMRAY = False
+
 
 def _mem_rss() -> int:
-    """Current RSS in KB (Linux ru_maxrss is in KB)."""
+    """Current RSS in KB. Reads /proc/self/status for live value on Linux
+    (resource.getrusage ru_maxrss is a peak watermark, never decreases)."""
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1])  # already in kB
+    except OSError:
+        pass
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 
 
@@ -57,6 +77,15 @@ def _mem_summary() -> None:
         print(f"  {label:<50}  {rss:>10}  {elapsed:>6.1f}s{marker}")
     print(f"\n  Peak: {peak_rss:,} KB ({peak_rss/1024:.1f} MB)")
     print("[MEM SUMMARY] " + "\u2500" * 50 + "\n")
+
+
+def _memray_stop() -> None:
+    if not _MEMRAY or _memray_tracker is None:
+        return
+    _memray_tracker.__exit__(None, None, None)
+    print(f"[MEMRAY] Profile written to {_memray_output}", flush=True)
+    print(f"[MEMRAY] View flame graph: memray flamegraph {_memray_output}", flush=True)
+    print(f"[MEMRAY] View summary:     memray summary {_memray_output}", flush=True)
 
 
 CYAN = "\033[36m"
@@ -194,6 +223,14 @@ TIER_AGENTS = {
 if _MEM_DEBUG:
     tracemalloc.start()
     _mem_checkpoint("startup")
+
+# Start memray profiling if enabled
+if _MEMRAY:
+    import memray
+    _memray_output = f"ralph_profile_{datetime.now().strftime('%Y%m%d_%H%M%S')}.bin"
+    _memray_tracker = memray.Tracker(_memray_output, native_traces=True)
+    _memray_tracker.__enter__()
+    print(f"[MEMRAY] Profiling to {_memray_output}", flush=True)
 
 # Parse arguments
 mode = "spec"
@@ -1526,6 +1563,7 @@ if mode == "plan":
         total = int((datetime.now() - plan_start).total_seconds())
         print(f"\nTotal elapsed: {total // 60}m {total % 60}s")
         _mem_summary()
+        _memray_stop()
     sys.exit(0)
 
 # Skills mode: discover project tooling and create Claude Code skills
@@ -1807,4 +1845,5 @@ if mode == "build":
         total = int((datetime.now() - loop_start).total_seconds())
         print(f"\nTotal elapsed: {total // 60}m {total % 60}s")
         _mem_summary()
+        _memray_stop()
     sys.exit(0)

@@ -227,28 +227,27 @@ Lists all specs for a project grouped by domain, showing feature name, descripti
 
 ## Memory profiling
 
-To diagnose high memory usage, set `RALPH_MEMORY_DEBUG=1` before running any command:
+### Checkpoint monitoring (`RALPH_MEMORY_DEBUG`)
+
+Set `RALPH_MEMORY_DEBUG=1` to print live RSS checkpoints at every phase boundary:
 
 ```bash
 RALPH_MEMORY_DEBUG=1 uv run ralph.py -p my-app plan
 RALPH_MEMORY_DEBUG=1 uv run ralph.py -p my-app build
 ```
 
-This instruments every phase boundary with RSS checkpoints and `tracemalloc` snapshots using only stdlib — no extra dependencies. During the run, `[MEM]` lines are printed in real-time:
+During the run, `[MEM]` lines show current RSS (read from `/proc/self/status`, not a peak watermark):
 
 ```
 [MEM]    0.0s    124032 KB  startup
 [MEM]    1.2s    131440 KB  phase1:assessment:start
 [MEM]   18.7s    198312 KB  phase1:assessment:end assess_len=4821
-[MEM ALLOC] Top 5 at: phase1:assessment:end
-  ralph.py:555: size=42.3 MiB, count=1821, average=23.8 KiB
-  ...
 [MEM]   19.1s    201000 KB  phase2:research:start
 [MEM]   19.3s    203100 KB  phase2:agent:file_mapping:start
 ...
 ```
 
-At the end of the run, a summary table shows peak RSS per checkpoint:
+At the end of the run, a summary table is printed:
 
 ```
 [MEM SUMMARY] ──────────────────────────────────────────────────
@@ -260,7 +259,29 @@ At the end of the run, a summary table shows peak RSS per checkpoint:
   Peak: 521,888 KB (509.6 MB)
 ```
 
-Checkpoints are added at: startup, every `run_claude`/`run_claude_quiet` call, each research agent start/end (including concurrent ones), each plan phase transition, each validation round, each reflection round, and each build iteration.
+### Deep profiling with memray (`RALPH_MEMRAY`)
+
+For finding actual memory bottlenecks, use [memray](https://github.com/bloomberg/memray). It tracks all allocations including C extensions (httpx, SSL), which `RALPH_MEMORY_DEBUG` cannot see.
+
+```bash
+# Install once
+uv add memray
+
+# Run with profiling (writes ralph_profile_<timestamp>.bin)
+RALPH_MEMRAY=1 uv run ralph.py build -p myproject
+
+# View flame graph (opens browser)
+uv run memray flamegraph ralph_profile_<timestamp>.bin
+
+# Or terminal summary
+uv run memray summary ralph_profile_<timestamp>.bin
+```
+
+For a live TUI while the script runs:
+
+```bash
+uv run python -m memray run --live --native ralph.py build -p myproject
+```
 
 ## Project layout
 
